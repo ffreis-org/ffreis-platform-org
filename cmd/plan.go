@@ -12,6 +12,7 @@ var planCmd = &cobra.Command{
 	Short: "Run terraform plan for the given environment",
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		ctx := cmd.Context()
+		out := newCommandOutput(cmd, d.ui)
 
 		root, err := repoRoot()
 		if err != nil {
@@ -21,6 +22,10 @@ var planCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+
+		out.Header("Platform Org Plan", envAccountRegionSummary(d.env, d.accountID, d.region))
+		out.Summary("Context", "stack="+stack)
+		out.Blank()
 
 		if err := ensureInit(ctx, stack, root, d.env, d.creds); err != nil {
 			return fmt.Errorf("terraform init: %w", err)
@@ -38,11 +43,16 @@ var planCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+
 		switch code {
 		case 0:
 			d.log.Info("plan complete: no changes")
+			out.Blank()
+			out.Status("ok", "ok", "terraform plan complete; no changes detected")
 		case 2:
 			d.log.Info("plan complete: changes detected")
+			out.Blank()
+			out.Status("warn", "plan", "terraform plan complete; changes detected")
 		default:
 			return fmt.Errorf("terraform plan exited with code %d", code)
 		}

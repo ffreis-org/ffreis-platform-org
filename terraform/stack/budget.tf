@@ -33,7 +33,7 @@ resource "aws_budgets_budget" "platform_admin" {
     subscriber_email_addresses = [var.budget_alert_email]
   }
 
-  tags = merge(var.tags, {
+  tags = merge(local.common_tags, {
     Layer = "platform-org"
     Stack = "platform-org"
   })

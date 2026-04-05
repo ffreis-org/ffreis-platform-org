@@ -37,11 +37,20 @@ variable "budget_alert_threshold_usd" {
   }
 }
 
+variable "project" {
+  description = "Project tag value applied to all managed resources."
+  type        = string
+  default     = "platform"
+}
+
+variable "environment" {
+  description = "Environment tag value applied to all managed resources."
+  type        = string
+  default     = "prod"
+}
+
 variable "tags" {
-  description = "Common tags applied to all resources."
+  description = "Additional tags applied to all resources."
   type        = map(string)
-  default = {
-    ManagedBy = "terraform"
-    Stack     = "platform-org"
-  }
+  default     = {}
 }

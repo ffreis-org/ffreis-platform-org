@@ -72,8 +72,8 @@ func TestExecuteHelp(t *testing.T) {
 	rootCmd.SetOut(io.Discard)
 	rootCmd.SetErr(io.Discard)
 
-	if err := Execute(); err != nil {
-		t.Fatalf("Execute: %v", err)
+	if code := Execute(); code != exitOK {
+		t.Fatalf("Execute() code = %d, want %d", code, exitOK)
 	}
 }
 

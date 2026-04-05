@@ -8,10 +8,12 @@ ORG           ?= ffreis
 PROFILE       ?= bootstrap
 BOOTSTRAP_BIN ?= platform-bootstrap
 
-CLI_BIN  ?= ./bin/platform-org
-CLI_SRC  := ./cmd/platform-org
-GO       ?= $(shell command -v go 2>/dev/null || echo /usr/local/go/bin/go)
-GOFMT    ?= $(shell command -v gofmt 2>/dev/null || echo /usr/local/go/bin/gofmt)
+CLI_BIN     ?= ./bin/platform-org
+CLI_SRC     := ./cmd/platform-org
+LAMBDA_BIN  ?= ./bin/activate-lambda
+LAMBDA_SRC  := ./lambda/activate
+GO          ?= $(shell command -v go 2>/dev/null || echo /usr/local/go/bin/go)
+GOFMT       ?= $(shell command -v gofmt 2>/dev/null || echo /usr/local/go/bin/gofmt)
 
 FETCHED_FILE = $(ENVS_DIR)/$(ENV)/fetched.auto.tfvars.json
 BACKEND_LOCAL_FILE = $(STACK)/backend.local.hcl
@@ -30,13 +32,22 @@ _require_fetched: _require_env
 		echo "Missing $(FETCHED_FILE). Run: make fetch ENV=$(ENV)" >&2; \
 		exit 1)
 
-.PHONY: build go-test go-audit fetch init plan apply destroy nuke fmt fmt-check validate lint test check check-static security coverage \
+.PHONY: build build-cli build-lambda go-test go-audit fetch init plan apply destroy nuke fmt fmt-check validate lint test check check-static security coverage \
         secrets-scan-staged lefthook-bootstrap lefthook-install lefthook-run lefthook \
         _require_env _require_fetched
 
-## build: compile the platform-org CLI to ./bin/platform-org
-build:
+## build: compile CLI and Lambda (everything needed before apply)
+build: build-cli build-lambda
+
+## build-cli: compile only the platform-org CLI to ./bin/platform-org
+build-cli:
 	$(GO) build -o $(CLI_BIN) $(CLI_SRC)
+
+## build-lambda: compile and zip the activate Lambda to ./bin/activate-lambda/function.zip
+build-lambda:
+	@mkdir -p $(LAMBDA_BIN)
+	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 $(GO) build -o $(LAMBDA_BIN)/bootstrap $(LAMBDA_SRC)
+	cd $(LAMBDA_BIN) && zip -j function.zip bootstrap
 
 ## go-test: run Go unit tests for the CLI
 go-test:
@@ -127,11 +138,10 @@ fmt-check:
 	fi
 	terraform fmt -check -recursive .
 
-## validate: validate the stack configuration (static)
+## validate: validate the stack configuration (static, no AWS credentials required)
 validate:
 	./scripts/hooks/check_required_tools.sh terraform
-	terraform -chdir=$(STACK) init -backend=false -input=false -no-color
-	terraform -chdir=$(STACK) validate -no-color
+	./scripts/hooks/validate_terraform.sh
 
 ## lint: run tflint across all Terraform files
 lint:

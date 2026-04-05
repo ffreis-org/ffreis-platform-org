@@ -16,7 +16,7 @@ pre-commit:
       run: ./scripts/hooks/run_tflint_if_available.sh
     validate:
       glob: "**/*.tf"
-      run: terraform -chdir=terraform/stack init -backend=false -input=false -no-color && terraform -chdir=terraform/stack validate -no-color
+      run: ./scripts/hooks/validate_terraform.sh
     secret-scan:
       run: make secrets-scan-staged
 

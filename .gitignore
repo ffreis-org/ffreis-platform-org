@@ -72,3 +72,4 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+terraform/stack/validate_credentials_override.tf

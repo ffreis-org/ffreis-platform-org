@@ -1,12 +1,14 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 // stackDir and envsDir define the terraform project layout for this repo.
@@ -171,4 +173,82 @@ func ensureInit(ctx context.Context, stackPath, root, env string, creds rawCreds
 	}
 	d.log.Info("stack not initialised; running terraform init", "stack", stackPath)
 	return terraformInit(ctx, stackPath, root, env, creds)
+}
+
+// terraformPlanJSON produces a read-only JSON representation of the current
+// stack plan so audit can derive the expected resource inventory directly from
+// Terraform configuration/state instead of a hardcoded Go list.
+func terraformPlanJSON(ctx context.Context) ([]byte, error) {
+	root, err := repoRoot()
+	if err != nil {
+		return nil, err
+	}
+	stackPath, err := stackDir()
+	if err != nil {
+		return nil, err
+	}
+	if err := ensureInit(ctx, stackPath, root, d.env, d.creds); err != nil {
+		return nil, fmt.Errorf("terraform init: %w", err)
+	}
+
+	planFile, err := os.CreateTemp("/tmp", "platform-org-audit-*.tfplan")
+	if err != nil {
+		return nil, fmt.Errorf("create plan file: %w", err)
+	}
+	planPath := planFile.Name()
+	if err := planFile.Close(); err != nil {
+		return nil, fmt.Errorf("close plan file: %w", err)
+	}
+	defer func() { _ = os.Remove(planPath) }()
+
+	planArgs := []string{
+		"plan",
+		"-input=false",
+		"-lock=false",
+		"-detailed-exitcode",
+		"-no-color",
+		"-out=" + planPath,
+	}
+	planArgs = append(planArgs, varFileArgs(stackPath, root, d.env)...)
+
+	var planStdout, planStderr bytes.Buffer
+	code, err := runTerraform(ctx, runOptions{
+		stackPath: stackPath,
+		args:      planArgs,
+		creds:     d.creds,
+		stdout:    &planStdout,
+		stderr:    &planStderr,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if code != 0 && code != 2 {
+		return nil, fmt.Errorf("terraform plan exited with code %d: %s", code, terraformCommandError(planStdout.String(), planStderr.String()))
+	}
+
+	var showStdout, showStderr bytes.Buffer
+	code, err = runTerraform(ctx, runOptions{
+		stackPath: stackPath,
+		args:      []string{"show", "-json", planPath},
+		creds:     d.creds,
+		stdout:    &showStdout,
+		stderr:    &showStderr,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if code != 0 {
+		return nil, fmt.Errorf("terraform show -json exited with code %d: %s", code, terraformCommandError(showStdout.String(), showStderr.String()))
+	}
+	return showStdout.Bytes(), nil
+}
+
+func terraformCommandError(stdout, stderr string) string {
+	if msg := strings.TrimSpace(stderr); msg != "" {
+		return msg
+	}
+	if msg := strings.TrimSpace(stdout); msg != "" {
+		return msg
+	}
+	return "no output"
 }

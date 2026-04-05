@@ -110,11 +110,25 @@ func TestAssumeAdminRoleAlreadyAssumedSkipsSTS(t *testing.T) {
 	}
 }
 
-func TestAssumeAdminRoleRootSkipsSTS(t *testing.T) {
+func TestAssumeAdminRoleRootUsesTempUserBridge(t *testing.T) {
 	d.log = newLogger("error")
 	cfg := sdkaws.Config{
 		Region:      testRegion,
 		Credentials: credentials.NewStaticCredentialsProvider("ROOTKEY", "secret", "token"),
+	}
+
+	// Inject a stub that records it was called and returns known assumed-role creds.
+	bridgeCalled := false
+	orig := assumeRoleViaTempUserFn
+	t.Cleanup(func() { assumeRoleViaTempUserFn = orig })
+	assumeRoleViaTempUserFn = func(_ context.Context, _ sdkaws.Config, _ string, region string) (sdkaws.Config, rawCreds, error) {
+		bridgeCalled = true
+		rc := rawCreds{AccessKeyID: "ASSUMED", SecretAccessKey: "assumed-secret", SessionToken: "assumed-token", Region: region}
+		bridgeCfg := sdkaws.Config{
+			Region:      region,
+			Credentials: credentials.NewStaticCredentialsProvider(rc.AccessKeyID, rc.SecretAccessKey, rc.SessionToken),
+		}
+		return bridgeCfg, rc, nil
 	}
 
 	assumedCfg, creds, err := assumeAdminRole(
@@ -127,10 +141,13 @@ func TestAssumeAdminRoleRootSkipsSTS(t *testing.T) {
 	if err != nil {
 		t.Fatalf("assumeAdminRole: %v", err)
 	}
-	if assumedCfg.Region != cfg.Region {
-		t.Fatalf("region: want %q got %q", cfg.Region, assumedCfg.Region)
+	if !bridgeCalled {
+		t.Fatal("expected temp-user bridge to be called for root caller")
 	}
-	if creds.AccessKeyID != "ROOTKEY" {
-		t.Fatalf("access key: want ROOTKEY got %q", creds.AccessKeyID)
+	if assumedCfg.Region != testRegion {
+		t.Fatalf("region: want %q got %q", testRegion, assumedCfg.Region)
+	}
+	if creds.AccessKeyID != "ASSUMED" {
+		t.Fatalf("access key: want ASSUMED got %q", creds.AccessKeyID)
 	}
 }

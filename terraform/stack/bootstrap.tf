@@ -35,52 +35,21 @@ data "aws_sns_topic" "platform_events" {
 }
 
 # ---------------------------------------------------------------------------
-# Cost Allocation Tag activation
-#
-# The tags Project / Layer / Owner / Stack exist on resources but are invisible
-# to Cost Explorer, Budgets, and cost allocation reports until explicitly
-# activated here. Activation is account-wide and idempotent.
-#
-# Requires the caller to have ce:UpdateCostAllocationTagsStatus. This is
-# typically held by the platform-admin role used by this stack.
-# ---------------------------------------------------------------------------
-
-resource "aws_ce_cost_allocation_tag" "layer" {
-  tag_key = "Layer"
-  status  = "Active"
-}
-
-resource "aws_ce_cost_allocation_tag" "project" {
-  tag_key = "Project"
-  status  = "Active"
-}
-
-resource "aws_ce_cost_allocation_tag" "owner" {
-  tag_key = "Owner"
-  status  = "Active"
-}
-
-resource "aws_ce_cost_allocation_tag" "stack" {
-  tag_key = "Stack"
-  status  = "Active"
-}
-
-resource "aws_ce_cost_allocation_tag" "environment" {
-  tag_key = "Environment"
-  status  = "Active"
-}
-
+# Cost allocation tags are no longer managed by Terraform.
+# They are activated directly via the AWS Cost Explorer API by:
+#   - 'platform-org activate'  (manual CLI path)
+#   - the activate Lambda      (auto path, ~25h after apply)
 # ---------------------------------------------------------------------------
 # Resource Group: bootstrap layer
 #
 # Queries all resources tagged Layer=bootstrap. Provides a single-pane
-# view in the AWS Console (Resource Groups), CloudTrail queries, and the
-# Resource Groups Tagging API — useful for auditing and bulk operations.
+# view in the AWS Console, CloudTrail queries, and the Resource Groups
+# Tagging API — useful for auditing and bulk operations.
 # ---------------------------------------------------------------------------
 
 resource "aws_resourcegroups_group" "bootstrap" {
   name        = "${var.org}-bootstrap-layer"
-  description = "All resources created and owned by platform-bootstrap (read-only, do not modify via Terraform)"
+  description = "Bootstrap layer resources - managed by platform-bootstrap CLI"
 
   resource_query {
     type = "TAG_FILTERS_1_0"
@@ -93,7 +62,7 @@ resource "aws_resourcegroups_group" "bootstrap" {
     })
   }
 
-  tags = merge(var.tags, {
+  tags = merge(local.common_tags, {
     Layer = "platform-org"
     Stack = "platform-org"
   })

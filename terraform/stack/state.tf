@@ -11,7 +11,7 @@
 # ---------------------------------------------------------------------------
 
 module "tf_state_runtime" {
-  source = "git::https://github.com/FelipeFuhr/ffreis-platform-terraform-modules.git//modules/s3-bucket?ref=e8bc4e4fdbc22306c8045c5f74deb67745a6e29b"
+  source = "git::https://github.com/FelipeFuhr/ffreis-platform-terraform-modules.git//modules/s3-bucket?ref=f828c757a5c837a33675e0f383f988f93d4f3387"
 
   bucket                = "${var.org}-tf-state-runtime"
   versioning_enabled    = true
@@ -28,7 +28,7 @@ module "tf_state_runtime" {
     },
   ]
 
-  tags = merge(var.tags, {
+  tags = merge(local.common_tags, {
     Name    = "${var.org}-tf-state-runtime"
     Purpose = "terraform-state"
     Tier    = "runtime"
@@ -38,12 +38,12 @@ module "tf_state_runtime" {
 }
 
 module "tf_locks_runtime" {
-  source = "git::https://github.com/FelipeFuhr/ffreis-platform-terraform-modules.git//modules/dynamodb-table?ref=e8bc4e4fdbc22306c8045c5f74deb67745a6e29b"
+  source = "git::https://github.com/FelipeFuhr/ffreis-platform-terraform-modules.git//modules/dynamodb-table?ref=f828c757a5c837a33675e0f383f988f93d4f3387"
 
   name     = "${var.org}-tf-locks-runtime"
   hash_key = "LockID"
 
-  tags = merge(var.tags, {
+  tags = merge(local.common_tags, {
     Name    = "${var.org}-tf-locks-runtime"
     Purpose = "terraform-locks"
     Tier    = "runtime"

@@ -60,6 +60,11 @@ func TestParseARN(t *testing.T) {
 			wantType: "lambda/function",
 			wantName: "my-function",
 		},
+		{
+			arn:      "arn:aws:logs:us-east-1:123456789012:log-group:/aws/lambda/ffreis-activate-cost-tags",
+			wantType: "logs/log-group",
+			wantName: "/aws/lambda/ffreis-activate-cost-tags",
+		},
 	}
 
 	for _, tc := range cases {
@@ -76,15 +81,20 @@ func TestParseARN(t *testing.T) {
 }
 
 func TestClassifyResource_Bootstrap(t *testing.T) {
+	const testARN = "arn:aws:dynamodb:us-east-1:123:table/ffreis-bootstrap-registry"
 	m := testResourceTagMapping(
-		"arn:aws:dynamodb:us-east-1:123:table/ffreis-bootstrap-registry",
+		testARN,
+		testTag("Stack", "bootstrap"),
 		testTag("Layer", "bootstrap"),
 		testTag("ManagedBy", "platform-bootstrap"),
 	)
 	r := classifyResource(m)
 	assertAuditStatus(t, r, "OK")
-	if r.stack != "(bootstrap)" {
-		t.Errorf("want (bootstrap) got %q", r.stack)
+	if r.stack != "bootstrap" {
+		t.Errorf("want bootstrap got %q", r.stack)
+	}
+	if r.arn != testARN {
+		t.Errorf("arn: want %q got %q", testARN, r.arn)
 	}
 }
 
@@ -117,12 +127,16 @@ func TestClassifyResource_OwnedMissingTag(t *testing.T) {
 }
 
 func TestClassifyResource_Unowned(t *testing.T) {
+	const testARN = "arn:aws:s3:::some-manual-bucket"
 	m := testResourceTagMapping(
-		"arn:aws:s3:::some-manual-bucket",
+		testARN,
 		testTag("Name", "manual"),
 	)
 	r := classifyResource(m)
 	assertAuditStatus(t, r, "UNOWNED")
+	if r.arn != testARN {
+		t.Errorf("arn: want %q got %q", testARN, r.arn)
+	}
 }
 
 func TestClassifyResource_TerraformOwnedUnknownStack(t *testing.T) {

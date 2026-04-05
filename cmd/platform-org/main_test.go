@@ -1,11 +1,8 @@
 package main
 
-import (
-	"errors"
-	"testing"
-)
+import "testing"
 
-func TestMainDoesNotExitOnSuccess(t *testing.T) {
+func TestMainExitsWithExecuteCode(t *testing.T) {
 	oldExecute := execute
 	oldExit := exitFunc
 	t.Cleanup(func() {
@@ -13,32 +10,13 @@ func TestMainDoesNotExitOnSuccess(t *testing.T) {
 		exitFunc = oldExit
 	})
 
-	exited := false
-	execute = func() error { return nil }
-	exitFunc = func(int) { exited = true }
-
-	main()
-
-	if exited {
-		t.Fatal("main should not exit when execute succeeds")
-	}
-}
-
-func TestMainExitsOnError(t *testing.T) {
-	oldExecute := execute
-	oldExit := exitFunc
-	t.Cleanup(func() {
-		execute = oldExecute
-		exitFunc = oldExit
-	})
-
-	code := 0
-	execute = func() error { return errors.New("boom") }
+	code := -1
+	execute = func() int { return 7 }
 	exitFunc = func(c int) { code = c }
 
 	main()
 
-	if code != 1 {
-		t.Fatalf("exit code: want 1 got %d", code)
+	if code != 7 {
+		t.Fatalf("exit code: want 7 got %d", code)
 	}
 }

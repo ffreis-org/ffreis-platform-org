@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"strings"
@@ -16,6 +17,13 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/spf13/cobra"
+
+	platformui "github.com/ffreis/platform-org/internal/ui"
+)
+
+const (
+	exitOK    = 0
+	exitError = 1
 )
 
 type stsAPI interface {
@@ -24,13 +32,14 @@ type stsAPI interface {
 }
 
 var (
-	loadDefaultConfig = sdkcfg.LoadDefaultConfig
-	loadAWSConfigFn   = loadAWSConfig
-	assumeAdminRoleFn = assumeAdminRole
-	newSTSClient      = func(cfg sdkaws.Config) stsAPI { return sts.NewFromConfig(cfg) }
-	newTaggingClient  = resourcegroupstaggingapi.NewFromConfig
-	newBudgetsClient  = budgets.NewFromConfig
-	newCEClient       = costexplorer.NewFromConfig
+	loadDefaultConfig       = sdkcfg.LoadDefaultConfig
+	loadAWSConfigFn         = loadAWSConfig
+	assumeAdminRoleFn       = assumeAdminRole
+	assumeRoleViaTempUserFn = assumeRoleViaTempUser
+	newSTSClient            = func(cfg sdkaws.Config) stsAPI { return sts.NewFromConfig(cfg) }
+	newTaggingClient        = resourcegroupstaggingapi.NewFromConfig
+	newBudgetsClient        = budgets.NewFromConfig
+	newCEClient             = costexplorer.NewFromConfig
 )
 
 // deps holds shared state built once in PersistentPreRunE and read by all
@@ -40,15 +49,17 @@ var d struct {
 	region    string
 	logLevel  string
 	env       string
+	uiMode    string
+	org       string
 	accountID string
 	callerARN string
-	// creds holds assumed-role (or initial) credentials for subprocess injection.
-	creds rawCreds
-	// AWS service clients built from the assumed-role config.
-	tagging *resourcegroupstaggingapi.Client
-	budgets *budgets.Client
-	ce      *costexplorer.Client
-	log     *slog.Logger
+	creds     rawCreds
+	awsCfg    sdkaws.Config
+	tagging   *resourcegroupstaggingapi.Client
+	budgets   *budgets.Client
+	ce        *costexplorer.Client
+	log       *slog.Logger
+	ui        *platformui.Presenter
 }
 
 // rawCreds are the actual static credentials injected into terraform's env.
@@ -75,12 +86,16 @@ var rootCmd = &cobra.Command{
 	Short:         "Manage the platform organization Terraform stack",
 	SilenceErrors: true,
 	SilenceUsage:  true,
-
-	// PersistentPreRunE runs before every subcommand.
-	// It loads credentials, verifies identity, and assumes the platform-admin
-	// role so all operations (including terraform) run as platform-admin.
 	PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 		ctx := cmd.Context()
+
+		presenter, err := platformui.New(d.uiMode)
+		if err != nil {
+			return err
+		}
+		d.ui = presenter
+		ctx = platformui.WithPresenter(ctx, presenter)
+		cmd.SetContext(ctx)
 
 		d.log = newLogger(d.logLevel)
 
@@ -103,13 +118,13 @@ var rootCmd = &cobra.Command{
 			"region", d.region,
 		)
 
-		// Assume platform-admin unless already running as it (or as root which can't).
 		assumedCfg, assumedCreds, err := assumeAdminRoleFn(ctx, awsCfg, d.callerARN, d.accountID, d.region)
 		if err != nil {
 			return err
 		}
 
 		d.creds = assumedCreds
+		d.awsCfg = assumedCfg
 		d.tagging = newTaggingClient(assumedCfg)
 		d.budgets = newBudgetsClient(assumedCfg)
 		d.ce = newCEClient(assumedCfg)
@@ -118,9 +133,19 @@ var rootCmd = &cobra.Command{
 	},
 }
 
-// Execute runs the root Cobra command.
-func Execute() error {
-	return rootCmd.Execute()
+// Execute runs the root Cobra command and returns the process exit code.
+func Execute() int {
+	return executeCommand(rootCmd, os.Stderr)
+}
+
+func executeCommand(cmd *cobra.Command, stderr io.Writer) int {
+	if err := cmd.Execute(); err != nil {
+		if message := err.Error(); message != "" {
+			_, _ = io.WriteString(stderr, "error: "+message+"\n")
+		}
+		return exitError
+	}
+	return exitOK
 }
 
 // loadAWSConfig builds an aws.Config. When profile is set, it uses a named
@@ -150,9 +175,7 @@ func loadAWSConfig(ctx context.Context, profile, region string) (sdkaws.Config, 
 // assumeAdminRole assumes the platform-admin IAM role and returns a new
 // aws.Config and the raw static credentials for subprocess injection.
 // If already running as platform-admin (assumed-role ARN) it is a no-op.
-// If running as root (which cannot AssumeRole), it warns and continues.
 func assumeAdminRole(ctx context.Context, cfg sdkaws.Config, callerARN, accountID, region string) (sdkaws.Config, rawCreds, error) {
-	// Extract initial static creds for subprocess fallback.
 	initCreds, err := cfg.Credentials.Retrieve(ctx)
 	if err != nil {
 		return sdkaws.Config{}, rawCreds{}, fmt.Errorf("retrieving initial credentials: %w", err)
@@ -164,20 +187,18 @@ func assumeAdminRole(ctx context.Context, cfg sdkaws.Config, callerARN, accountI
 		Region:          region,
 	}
 
-	// Skip assumption if already running as platform-admin.
 	if strings.Contains(callerARN, "assumed-role/platform-admin/") {
 		d.log.Debug("already running as platform-admin; skipping assumption")
 		return cfg, initial, nil
 	}
 
-	// Root accounts cannot call sts:AssumeRole — AWS hard constraint.
+	roleARN := fmt.Sprintf("arn:aws:iam::%s:role/platform-admin", accountID)
+
 	if strings.HasSuffix(callerARN, ":root") {
-		d.log.Warn("running as root — sts:AssumeRole is not available; " +
-			"operations will run as root. Re-run as an IAM user or role to use platform-admin.")
-		return cfg, initial, nil
+		d.log.Info("running as root; using temp-user bridge to assume platform-admin")
+		return assumeRoleViaTempUserFn(ctx, cfg, roleARN, region)
 	}
 
-	roleARN := fmt.Sprintf("arn:aws:iam::%s:role/platform-admin", accountID)
 	stsClient := newSTSClient(cfg)
 	out, err := stsClient.AssumeRole(ctx, &sts.AssumeRoleInput{
 		RoleArn:         sdkaws.String(roleARN),
@@ -226,10 +247,13 @@ func newLogger(level string) *slog.Logger {
 }
 
 func init() {
-	rootCmd.Version = version
 	f := rootCmd.PersistentFlags()
 	f.StringVar(&d.profile, "profile", "", "AWS named profile (or use AWS_ACCESS_KEY_ID env vars)")
 	f.StringVar(&d.region, "region", "us-east-1", "AWS region")
 	f.StringVar(&d.logLevel, "log-level", "info", "Log level: debug, info, warn, error")
 	f.StringVar(&d.env, "env", "prod", "Environment: prod, staging, dev")
+	f.StringVar(&d.uiMode, "ui", "auto", "UI mode: auto, plain, rich")
+	f.StringVar(&d.org, "org", "ffreis", "Organisation name (used to construct resource names)")
+
+	rootCmd.AddCommand(versionCmd)
 }
