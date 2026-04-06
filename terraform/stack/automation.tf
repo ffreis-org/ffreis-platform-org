@@ -56,6 +56,7 @@ resource "aws_iam_role_policy" "activate_lambda" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
+      # sonar-ignore-start: AWS requires Resource="*" for Cost Explorer cost-allocation-tag APIs.
       {
         Sid    = "CostExplorer"
         Effect = "Allow"
@@ -70,6 +71,7 @@ resource "aws_iam_role_policy" "activate_lambda" {
         # AWS does not support resource-level restrictions for CreateLogGroup.
         Resource = "*"
       },
+      # sonar-ignore-end
       {
         Sid    = "LogsWrite"
         Effect = "Allow"
