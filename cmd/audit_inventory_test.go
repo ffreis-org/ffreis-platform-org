@@ -11,6 +11,8 @@ import (
 	sdkaws "github.com/aws/aws-sdk-go-v2/aws"
 )
 
+const testCostAllocationTagPlatformOrg = platformOrgStackTag
+
 // --- terraformInventorySource ---
 
 func TestTerraformInventorySourceID(t *testing.T) {
@@ -25,7 +27,7 @@ func TestTerraformInventorySourceCleanupNukeReturnsNil(t *testing.T) {
 	t.Parallel()
 	msgs, err := terraformInventorySource{}.cleanupNuke(context.Background())
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if msgs != nil {
 		t.Fatalf("expected nil messages, got: %v", msgs)
@@ -40,7 +42,7 @@ func TestTerraformInventorySourceLoadReturnsExpected(t *testing.T) {
 	}
 	result, err := terraformInventorySource{}.load(context.Background())
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	_ = result // empty expected list is fine
 }
@@ -75,16 +77,16 @@ func TestLoadAllCostTagStatusesReturnsSinglePage(t *testing.T) {
 	listCostAllocationTagsFn = func(_ context.Context, _ *costexplorer.ListCostAllocationTagsInput) (*costexplorer.ListCostAllocationTagsOutput, error) {
 		return &costexplorer.ListCostAllocationTagsOutput{
 			CostAllocationTags: []cetypes.CostAllocationTag{
-				{TagKey: sdkaws.String("platform-org"), Status: cetypes.CostAllocationTagStatusActive},
+				{TagKey: sdkaws.String(testCostAllocationTagPlatformOrg), Status: cetypes.CostAllocationTagStatusActive},
 			},
 		}, nil
 	}
 	statuses, err := loadAllCostTagStatuses(context.Background())
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
-	if statuses["platform-org"] != cetypes.CostAllocationTagStatusActive {
-		t.Fatalf("expected active status for platform-org, got: %v", statuses["platform-org"])
+	if statuses[testCostAllocationTagPlatformOrg] != cetypes.CostAllocationTagStatusActive {
+		t.Fatalf("expected active status for %s, got: %v", testCostAllocationTagPlatformOrg, statuses[testCostAllocationTagPlatformOrg])
 	}
 }
 
@@ -110,7 +112,7 @@ func TestLoadAllCostTagStatusesPaginates(t *testing.T) {
 	}
 	statuses, err := loadAllCostTagStatuses(context.Background())
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if call != 2 {
 		t.Fatalf("expected 2 list calls, got %d", call)

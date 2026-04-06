@@ -25,6 +25,7 @@ const (
 	testOrganizationsDeletePolicy     = "AWSOrganizationsV20161128.DeletePolicy"
 	testOrganizationsDeleteOU         = "AWSOrganizationsV20161128.DeleteOrganizationalUnit"
 	testOrganizationsCloseAccount     = "AWSOrganizationsV20161128.CloseAccount"
+	testExpectedStringGotQuotedErrorf = "expected %s, got %q"
 )
 
 func testOrganizationsClient(t *testing.T, handler http.HandlerFunc) *organizations.Client {
@@ -82,7 +83,7 @@ func TestFindOrganizationalUnitIDByNameFound(t *testing.T) {
 		t.Fatalf(errUnexpectedError, err)
 	}
 	if id != testOrganizationEnvOUID {
-		t.Fatalf("expected %s, got %q", testOrganizationEnvOUID, id)
+		t.Fatalf(testExpectedStringGotQuotedErrorf, testOrganizationEnvOUID, id)
 	}
 }
 
@@ -132,7 +133,7 @@ func TestFindOrganizationalUnitIDByNamePaginated(t *testing.T) {
 		t.Fatalf(errUnexpectedError, err)
 	}
 	if id != testOrganizationEnvOUID {
-		t.Fatalf("expected %s, got %q", testOrganizationEnvOUID, id)
+		t.Fatalf(testExpectedStringGotQuotedErrorf, testOrganizationEnvOUID, id)
 	}
 	if listCalls != 2 {
 		t.Fatalf("expected 2 list calls, got %d", listCalls)
@@ -202,7 +203,7 @@ func TestFindOrganizationTargetIDByNameEnvironmentsOU(t *testing.T) {
 		t.Fatalf(errUnexpectedError, err)
 	}
 	if id != testOrganizationEnvOUID {
-		t.Fatalf("expected %s, got %q", testOrganizationEnvOUID, id)
+		t.Fatalf(testExpectedStringGotQuotedErrorf, testOrganizationEnvOUID, id)
 	}
 }
 

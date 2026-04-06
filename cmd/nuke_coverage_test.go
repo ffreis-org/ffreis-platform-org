@@ -10,7 +10,12 @@ import (
 	dbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 )
 
-const testUnknownResourceType = "unknown/type"
+const (
+	testUnknownResourceType    = "unknown/type"
+	testNukeSchedulerSchedule  = "scheduler/schedule"
+	testNukeProdTerraformState = "prod/terraform.tfstate"
+	testNukeCoverageBucketName = "my-bucket"
+)
 
 // --- existsByAPICall ---
 
@@ -39,12 +44,12 @@ func TestExistsByAPICallReturnsErrorOnOtherError(t *testing.T) {
 // --- nukeCleanupTargetRank ---
 
 func TestNukeCleanupTargetRankSchedulerFirst(t *testing.T) {
-	schedRank := nukeCleanupTargetRank(auditResource{resourceType: "scheduler/schedule"})
+	schedRank := nukeCleanupTargetRank(auditResource{resourceType: testNukeSchedulerSchedule})
 	orgRank := nukeCleanupTargetRank(auditResource{resourceType: resourceTypeOrganizationsOrganization})
 	defaultRank := nukeCleanupTargetRank(auditResource{resourceType: testUnknownResourceType})
 
 	if schedRank >= orgRank {
-		t.Fatalf("scheduler/schedule should have lower rank than organizations/organization: %d vs %d", schedRank, orgRank)
+		t.Fatalf("%s should have lower rank than organizations/organization: %d vs %d", testNukeSchedulerSchedule, schedRank, orgRank)
 	}
 	if defaultRank <= orgRank {
 		t.Fatalf("unknown type default rank (%d) should be higher than org rank (%d)", defaultRank, orgRank)
@@ -53,7 +58,7 @@ func TestNukeCleanupTargetRankSchedulerFirst(t *testing.T) {
 
 func TestNukeCleanupTargetRankAllKnownTypes(t *testing.T) {
 	types := []string{
-		"scheduler/schedule",
+		testNukeSchedulerSchedule,
 		"lambda/function",
 		"logs/log-group",
 		resourceTypeIAMRole,
@@ -100,10 +105,10 @@ func TestNukeCleanupTargetLessByNameWhenSameRankAndType(t *testing.T) {
 
 func TestLockItemStringReturnsMemberSValue(t *testing.T) {
 	item := map[string]dbtypes.AttributeValue{
-		"LockID": &dbtypes.AttributeValueMemberS{Value: "prod/terraform.tfstate"},
+		"LockID": &dbtypes.AttributeValueMemberS{Value: testNukeProdTerraformState},
 	}
 	got := lockItemString(item, "LockID")
-	if got != "prod/terraform.tfstate" {
+	if got != testNukeProdTerraformState {
 		t.Fatalf("lockItemString: %q", got)
 	}
 }
@@ -128,18 +133,18 @@ func TestLockItemStringReturnsEmptyForNonStringAttribute(t *testing.T) {
 
 func TestMatchesTerraformLockItemByStateKey(t *testing.T) {
 	item := map[string]dbtypes.AttributeValue{
-		"LockID": &dbtypes.AttributeValueMemberS{Value: "prod/terraform.tfstate"},
+		"LockID": &dbtypes.AttributeValueMemberS{Value: testNukeProdTerraformState},
 	}
-	if !matchesTerraformLockItem(item, "my-bucket", "prod/terraform.tfstate") {
+	if !matchesTerraformLockItem(item, testNukeCoverageBucketName, testNukeProdTerraformState) {
 		t.Fatal("expected item to match by state key")
 	}
 }
 
 func TestMatchesTerraformLockItemByBucketAndKey(t *testing.T) {
 	item := map[string]dbtypes.AttributeValue{
-		"LockID": &dbtypes.AttributeValueMemberS{Value: "my-bucket/prod/terraform.tfstate"},
+		"LockID": &dbtypes.AttributeValueMemberS{Value: testNukeCoverageBucketName + "/" + testNukeProdTerraformState},
 	}
-	if !matchesTerraformLockItem(item, "my-bucket", "prod/terraform.tfstate") {
+	if !matchesTerraformLockItem(item, testNukeCoverageBucketName, testNukeProdTerraformState) {
 		t.Fatal("expected item to match by bucket+key combination")
 	}
 }
@@ -148,7 +153,7 @@ func TestMatchesTerraformLockItemNoMatch(t *testing.T) {
 	item := map[string]dbtypes.AttributeValue{
 		"LockID": &dbtypes.AttributeValueMemberS{Value: "other-bucket/staging/terraform.tfstate"},
 	}
-	if matchesTerraformLockItem(item, "my-bucket", "prod/terraform.tfstate") {
+	if matchesTerraformLockItem(item, testNukeCoverageBucketName, testNukeProdTerraformState) {
 		t.Fatal("expected item not to match")
 	}
 }
@@ -157,11 +162,11 @@ func TestMatchesTerraformLockItemNoMatch(t *testing.T) {
 
 func TestAppendMatchingVersionsFiltersOnKey(t *testing.T) {
 	src := []s3types.ObjectVersion{
-		{Key: sdkaws.String("prod/terraform.tfstate"), VersionId: sdkaws.String("v1")},
+		{Key: sdkaws.String(testNukeProdTerraformState), VersionId: sdkaws.String("v1")},
 		{Key: sdkaws.String("other/key"), VersionId: sdkaws.String("v2")},
-		{Key: sdkaws.String("prod/terraform.tfstate"), VersionId: sdkaws.String("v3")},
+		{Key: sdkaws.String(testNukeProdTerraformState), VersionId: sdkaws.String("v3")},
 	}
-	dst := appendMatchingVersions(nil, src, "prod/terraform.tfstate")
+	dst := appendMatchingVersions(nil, src, testNukeProdTerraformState)
 	if len(dst) != 2 {
 		t.Fatalf("expected 2 matching versions, got %d: %+v", len(dst), dst)
 	}
@@ -171,10 +176,10 @@ func TestAppendMatchingVersionsFiltersOnKey(t *testing.T) {
 
 func TestAppendMatchingMarkersFiltersOnKey(t *testing.T) {
 	src := []s3types.DeleteMarkerEntry{
-		{Key: sdkaws.String("prod/terraform.tfstate"), VersionId: sdkaws.String("m1")},
+		{Key: sdkaws.String(testNukeProdTerraformState), VersionId: sdkaws.String("m1")},
 		{Key: sdkaws.String("other/key"), VersionId: sdkaws.String("m2")},
 	}
-	dst := appendMatchingMarkers(nil, src, "prod/terraform.tfstate")
+	dst := appendMatchingMarkers(nil, src, testNukeProdTerraformState)
 	if len(dst) != 1 {
 		t.Fatalf("expected 1 matching marker, got %d: %+v", len(dst), dst)
 	}

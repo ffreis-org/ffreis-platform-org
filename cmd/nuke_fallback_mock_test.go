@@ -19,6 +19,9 @@ import (
 
 const (
 	testExpectedNonEmptyTargetDir = "expected non-empty targetDir"
+	testNukeFallbackBucketName    = "my-bucket"
+	testNukeFallbackTableName     = "my-table"
+	testNukeFallbackDeleteFailed  = "delete failed"
 	testNukeFallbackLockID        = "lock-1"
 	testNukeFallbackStateKey      = "state.tfstate"
 )
@@ -48,7 +51,7 @@ func TestListStateObjectVersionsHeadBucketError(t *testing.T) {
 			return nil, errors.New("access denied")
 		},
 	}
-	_, _, err := listStateObjectVersions(context.Background(), mock, "my-bucket", testNukeFallbackStateKey)
+	_, _, err := listStateObjectVersions(context.Background(), mock, testNukeFallbackBucketName, testNukeFallbackStateKey)
 	if err == nil {
 		t.Fatal("expected error from HeadBucket failure")
 	}
@@ -75,7 +78,7 @@ func TestListStateObjectVersionsReturnsMatchingVersionsAndMarkers(t *testing.T) 
 			}, nil
 		},
 	}
-	versions, markers, err := listStateObjectVersions(context.Background(), mock, "my-bucket", stateKey)
+	versions, markers, err := listStateObjectVersions(context.Background(), mock, testNukeFallbackBucketName, stateKey)
 	if err != nil {
 		t.Fatalf(errUnexpectedError, err)
 	}
@@ -111,7 +114,7 @@ func TestListStateObjectVersionsPaginates(t *testing.T) {
 			}, nil
 		},
 	}
-	versions, _, err := listStateObjectVersions(context.Background(), mock, "my-bucket", stateKey)
+	versions, _, err := listStateObjectVersions(context.Background(), mock, testNukeFallbackBucketName, stateKey)
 	if err != nil {
 		t.Fatalf(errUnexpectedError, err)
 	}
@@ -133,7 +136,7 @@ func TestListStateObjectVersionsListError(t *testing.T) {
 			return nil, errors.New("list failed")
 		},
 	}
-	_, _, err := listStateObjectVersions(context.Background(), mock, "my-bucket", testNukeFallbackStateKey)
+	_, _, err := listStateObjectVersions(context.Background(), mock, testNukeFallbackBucketName, testNukeFallbackStateKey)
 	if err == nil {
 		t.Fatal("expected error from ListObjectVersions failure")
 	}
@@ -200,7 +203,7 @@ func TestDeleteStateVersionsAndMarkersVersionDeleteError(t *testing.T) {
 			return &s3.HeadBucketOutput{}, nil
 		},
 		deleteFn: func(_ context.Context, _ *s3.DeleteObjectInput, _ ...func(*s3.Options)) (*s3.DeleteObjectOutput, error) {
-			return nil, errors.New("delete failed")
+			return nil, errors.New(testNukeFallbackDeleteFailed)
 		},
 	}
 	cfg := nukeBackendStateConfig{BucketName: "bucket", TableName: "table", StateKey: testNukeFallbackStateKey}
@@ -223,7 +226,7 @@ func TestDeleteStateVersionsAndMarkersMarkerDeleteError(t *testing.T) {
 			return &s3.HeadBucketOutput{}, nil
 		},
 		deleteFn: func(_ context.Context, _ *s3.DeleteObjectInput, _ ...func(*s3.Options)) (*s3.DeleteObjectOutput, error) {
-			return nil, errors.New("delete failed")
+			return nil, errors.New(testNukeFallbackDeleteFailed)
 		},
 	}
 	cfg := nukeBackendStateConfig{BucketName: "bucket", TableName: "table", StateKey: testNukeFallbackStateKey}
@@ -251,7 +254,7 @@ func TestDeleteLockRowsEmptyItems(t *testing.T) {
 			return &dynamodb.ScanOutput{}, nil
 		},
 	}
-	deleted, err := deleteLockRows(context.Background(), mock, "my-table", nil)
+	deleted, err := deleteLockRows(context.Background(), mock, testNukeFallbackTableName, nil)
 	if err != nil {
 		t.Fatalf(errUnexpectedError, err)
 	}
@@ -279,7 +282,7 @@ func TestDeleteLockRowsDeletesItemsWithLockID(t *testing.T) {
 		{"LockID": &dbtypes.AttributeValueMemberS{Value: testNukeFallbackLockID}},
 		{"LockID": &dbtypes.AttributeValueMemberS{Value: "lock-2"}},
 	}
-	deleted, err := deleteLockRows(context.Background(), mock, "my-table", items)
+	deleted, err := deleteLockRows(context.Background(), mock, testNukeFallbackTableName, items)
 	if err != nil {
 		t.Fatalf(errUnexpectedError, err)
 	}
@@ -310,7 +313,7 @@ func TestDeleteLockRowsSkipsItemsWithNoLockID(t *testing.T) {
 		{"OtherField": &dbtypes.AttributeValueMemberS{Value: "val"}},
 		{"LockID": &dbtypes.AttributeValueMemberS{Value: testNukeFallbackLockID}},
 	}
-	deleted, err := deleteLockRows(context.Background(), mock, "my-table", items)
+	deleted, err := deleteLockRows(context.Background(), mock, testNukeFallbackTableName, items)
 	if err != nil {
 		t.Fatalf(errUnexpectedError, err)
 	}
@@ -332,13 +335,13 @@ func TestDeleteLockRowsDeleteError(t *testing.T) {
 			return &dynamodb.ScanOutput{}, nil
 		},
 		deleteFn: func(_ context.Context, _ *dynamodb.DeleteItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error) {
-			return nil, errors.New("delete failed")
+			return nil, errors.New(testNukeFallbackDeleteFailed)
 		},
 	}
 	items := []map[string]dbtypes.AttributeValue{
 		{"LockID": &dbtypes.AttributeValueMemberS{Value: testNukeFallbackLockID}},
 	}
-	_, err := deleteLockRows(context.Background(), mock, "my-table", items)
+	_, err := deleteLockRows(context.Background(), mock, testNukeFallbackTableName, items)
 	if err == nil {
 		t.Fatal("expected error from DeleteItem failure")
 	}
@@ -360,7 +363,7 @@ func TestDeleteLockRowsNotFoundTreatedAsDeleted(t *testing.T) {
 	items := []map[string]dbtypes.AttributeValue{
 		{"LockID": &dbtypes.AttributeValueMemberS{Value: testNukeFallbackLockID}},
 	}
-	deleted, err := deleteLockRows(context.Background(), mock, "my-table", items)
+	deleted, err := deleteLockRows(context.Background(), mock, testNukeFallbackTableName, items)
 	if err != nil {
 		t.Fatalf("not-found should be treated as deleted, got: %v", err)
 	}
@@ -406,7 +409,7 @@ func TestBackupBackendStateDataWithStateVersionsCreatesBackup(t *testing.T) {
 			}, nil
 		},
 	}
-	cfg := nukeBackendStateConfig{BucketName: "my-bucket", TableName: "lock-table", StateKey: stateKey}
+	cfg := nukeBackendStateConfig{BucketName: testNukeFallbackBucketName, TableName: "lock-table", StateKey: stateKey}
 	stateVersions := []s3types.ObjectVersion{
 		{Key: sdkaws.String(stateKey), VersionId: sdkaws.String("v1")},
 	}
@@ -468,7 +471,7 @@ func TestBackupBackendStateDataWithDeleteMarkers(t *testing.T) {
 			}, nil
 		},
 	}
-	cfg := nukeBackendStateConfig{BucketName: "my-bucket", TableName: "lock-table", StateKey: stateKey}
+	cfg := nukeBackendStateConfig{BucketName: testNukeFallbackBucketName, TableName: "lock-table", StateKey: stateKey}
 	deleteMarkers := []s3types.DeleteMarkerEntry{
 		{Key: sdkaws.String(stateKey), VersionId: sdkaws.String("m1")},
 	}

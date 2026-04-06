@@ -12,15 +12,23 @@ import (
 )
 
 const (
-	testDoctorBucketName         = "my-bucket"
-	testDoctorBucketBAddress     = "aws_s3_bucket.b"
-	testDoctorExistingBucketName = "existing-bucket"
-	testDoctorExistingBucketARN  = "arn:aws:s3:::" + testDoctorExistingBucketName
-	testDoctorNotExistsStrict    = "not exists strict"
-	testDoctorBlockingErrorf     = "Blocking=%v want %v"
-	testDoctorLambdaARN          = "arn:aws:lambda:us-east-1:123:function:myorg-activate-cost-tags"
-	testDoctorPlatformEventsARN  = "arn:aws:sns:us-east-1:123:myorg-platform-events"
-	testDoctorStatusDetailErrorf = "Status=%q want %q (detail=%s)"
+	testDoctorBucketName            = "my-bucket"
+	testDoctorRegion                = "us-east-1"
+	testDoctorStatusErrorf          = "Status=%q want %q"
+	testDoctorBucketBAddress        = "aws_s3_bucket.b"
+	testDoctorNewBucketName         = "new-bucket"
+	testDoctorBucketAddress         = "aws_s3_bucket.mybucket"
+	testDoctorGoneBucketAddress     = "aws_s3_bucket.gone"
+	testDoctorBucketAAddress        = "aws_s3_bucket.a"
+	testDoctorExistingBucketName    = "existing-bucket"
+	testDoctorExistingBucketARN     = "arn:aws:s3:::" + testDoctorExistingBucketName
+	testDoctorAccessDenied          = "access denied"
+	testDoctorNotExistsAllowMissing = "not exists allow missing"
+	testDoctorNotExistsStrict       = "not exists strict"
+	testDoctorBlockingErrorf        = "Blocking=%v want %v"
+	testDoctorLambdaARN             = "arn:aws:lambda:us-east-1:123:function:myorg-activate-cost-tags"
+	testDoctorPlatformEventsARN     = "arn:aws:sns:us-east-1:123:myorg-platform-events"
+	testDoctorStatusDetailErrorf    = "Status=%q want %q (detail=%s)"
 )
 
 // ---------------------------------------------------------------------------
@@ -50,19 +58,19 @@ func TestDoctorCheckBackendLocalFile(t *testing.T) {
 		},
 		{
 			name:     "missing bucket only",
-			local:    map[string]string{"dynamodb_table": "t", "region": "us-east-1"},
+			local:    map[string]string{"dynamodb_table": "t", "region": testDoctorRegion},
 			wantStat: "fail",
 			blocking: true,
 		},
 		{
 			name:     "whitespace value counts as missing",
-			local:    map[string]string{"bucket": "  ", "dynamodb_table": "t", "region": "us-east-1"},
+			local:    map[string]string{"bucket": "  ", "dynamodb_table": "t", "region": testDoctorRegion},
 			wantStat: "fail",
 			blocking: true,
 		},
 		{
 			name:     "complete config",
-			local:    map[string]string{"bucket": "b", "dynamodb_table": "t", "region": "us-east-1"},
+			local:    map[string]string{"bucket": "b", "dynamodb_table": "t", "region": testDoctorRegion},
 			wantStat: "ok",
 			blocking: false,
 		},
@@ -71,7 +79,7 @@ func TestDoctorCheckBackendLocalFile(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got := checkBackendLocalFile(tc.local, tc.localErr, "/path/backend.local.hcl")
 			if got.Status != tc.wantStat {
-				t.Errorf("Status=%q want %q", got.Status, tc.wantStat)
+				t.Errorf(testDoctorStatusErrorf, got.Status, tc.wantStat)
 			}
 			if got.Blocking != tc.blocking {
 				t.Errorf(testDoctorBlockingErrorf, got.Blocking, tc.blocking)
@@ -125,7 +133,7 @@ func TestDoctorCheckBackendEnvFile(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got := checkBackendEnvFile(tc.envCfg, tc.envErr, "/path/backend.hcl", tc.env)
 			if got.Status != tc.wantStat {
-				t.Errorf("Status=%q want %q", got.Status, tc.wantStat)
+				t.Errorf(testDoctorStatusErrorf, got.Status, tc.wantStat)
 			}
 			if got.Blocking != tc.blocking {
 				t.Errorf(testDoctorBlockingErrorf, got.Blocking, tc.blocking)
@@ -139,7 +147,7 @@ func TestDoctorCheckBackendEnvFile(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDoctorCheckBackendStateObject(t *testing.T) {
-	cfg := nukeBackendStateConfig{BucketName: "my-bucket", TableName: "my-table", StateKey: "platform-org/prod/terraform.tfstate"}
+	cfg := nukeBackendStateConfig{BucketName: testDoctorBucketName, TableName: "my-table", StateKey: "platform-org/prod/terraform.tfstate"}
 
 	tests := []struct {
 		name     string
@@ -157,7 +165,7 @@ func TestDoctorCheckBackendStateObject(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got := checkBackendStateObject(tc.count, tc.stateErr, cfg)
 			if got.Status != tc.wantStat {
-				t.Errorf("Status=%q want %q", got.Status, tc.wantStat)
+				t.Errorf(testDoctorStatusErrorf, got.Status, tc.wantStat)
 			}
 			if got.Blocking != tc.blocking {
 				t.Errorf(testDoctorBlockingErrorf, got.Blocking, tc.blocking)
@@ -191,7 +199,7 @@ func TestDoctorCheckBackendLockRows(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got := checkBackendLockRows(tc.lockCount, tc.stateCount, tc.lockErr, cfg)
 			if got.Status != tc.wantStat {
-				t.Errorf("Status=%q want %q", got.Status, tc.wantStat)
+				t.Errorf(testDoctorStatusErrorf, got.Status, tc.wantStat)
 			}
 			if got.Blocking != tc.blocking {
 				t.Errorf(testDoctorBlockingErrorf, got.Blocking, tc.blocking)
@@ -305,7 +313,7 @@ func TestDoctorCheckRuntimeSchedulerRolePolicy(t *testing.T) {
 		blocking bool
 	}{
 		{"error", "", false, errors.New("iam error"), modeAllowMissing, "fail", true},
-		{"not exists allow missing", "", false, nil, modeAllowMissing, "info", false},
+		{testDoctorNotExistsAllowMissing, "", false, nil, modeAllowMissing, "info", false},
 		{testDoctorNotExistsStrict, "", false, nil, modeStrict, "fail", true},
 		{"exists contains ARN", `{"Resource":"` + lambdaARN + `"}`, true, nil, modeAllowMissing, "ok", false},
 		{"exists missing ARN", `{"Resource":"arn:aws:lambda:us-east-1:123:function:other"}`, true, nil, modeAllowMissing, "fail", true},
@@ -347,7 +355,7 @@ func TestDoctorCheckRuntimeLambdaRolePolicy(t *testing.T) {
 		blocking bool
 	}{
 		{"error", "", false, errors.New("iam error"), modeAllowMissing, "fail", true},
-		{"not exists allow missing", "", false, nil, modeAllowMissing, "info", false},
+		{testDoctorNotExistsAllowMissing, "", false, nil, modeAllowMissing, "info", false},
 		{testDoctorNotExistsStrict, "", false, nil, modeStrict, "fail", true},
 		{"exists with both", docBoth, true, nil, modeAllowMissing, "ok", false},
 		{"exists missing log pattern", docMissingLog, true, nil, modeAllowMissing, "fail", true},
@@ -400,7 +408,7 @@ func TestDoctorCheckRuntimeLambdaEnvironment(t *testing.T) {
 		{
 			"other error",
 			nil,
-			errors.New("access denied"),
+			errors.New(testDoctorAccessDenied),
 			"fail", true,
 		},
 		{
@@ -472,14 +480,14 @@ func TestDoctorCheckRuntimeLambdaLogGroup(t *testing.T) {
 	}{
 		{"error", false, errors.New("logs error"), modeAllowMissing, "fail", true},
 		{"exists", true, nil, modeAllowMissing, "ok", false},
-		{"not exists allow missing", false, nil, modeAllowMissing, "info", false},
+		{testDoctorNotExistsAllowMissing, false, nil, modeAllowMissing, "info", false},
 		{testDoctorNotExistsStrict, false, nil, modeStrict, "fail", true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			got := checkRuntimeLambdaLogGroup(tc.exists, tc.err, tc.mode, logGroup)
 			if got.Status != tc.wantStat {
-				t.Errorf("Status=%q want %q", got.Status, tc.wantStat)
+				t.Errorf(testDoctorStatusErrorf, got.Status, tc.wantStat)
 			}
 			if got.Blocking != tc.blocking {
 				t.Errorf(testDoctorBlockingErrorf, got.Blocking, tc.blocking)
@@ -527,7 +535,7 @@ func TestDoctorExistsDetail(t *testing.T) {
 		resname string
 		wantSub string
 	}{
-		{"error returns error message", false, errors.New("access denied"), "bucket", testDoctorBucketName, "access denied"},
+		{"error returns error message", false, errors.New(testDoctorAccessDenied), "bucket", testDoctorBucketName, testDoctorAccessDenied},
 		{"not exists returns missing", false, nil, "bucket", testDoctorBucketName, "is missing"},
 		{"exists returns present", true, nil, "bucket", testDoctorBucketName, "is present"},
 	}
@@ -672,56 +680,49 @@ func TestDoctorSummarizePlatformOrgDoctor(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDoctorBuildStateLiveIndex(t *testing.T) {
-	t.Run("empty", func(t *testing.T) {
-		byARN, byName := buildStateLiveIndex(nil)
-		if len(byARN) != 0 || len(byName) != 0 {
-			t.Errorf("expected empty maps")
-		}
-	})
+	tests := []struct {
+		name            string
+		resources       []auditResource
+		wantARNKey      string
+		wantNameKey     string
+		wantARNLen      int
+		wantNameLen     int
+		wantNameEntries int
+	}{
+		{name: "empty"},
+		{name: "arn only", resources: []auditResource{{arn: testDoctorExistingBucketARN}}, wantARNKey: testDoctorExistingBucketARN, wantNameLen: 0},
+		{name: "name only", resources: []auditResource{{name: "My-Bucket"}}, wantARNLen: 0, wantNameKey: strings.ToLower(testDoctorBucketName)},
+		{name: "both arn and name", resources: []auditResource{{arn: "arn:aws:s3:::bkt", name: "bkt"}}, wantARNKey: "arn:aws:s3:::bkt", wantNameKey: "bkt"},
+		{name: "multiple resources with same name", resources: []auditResource{{name: "shared"}, {name: "shared"}}, wantNameKey: "shared", wantNameEntries: 2},
+	}
 
-	t.Run("arn only", func(t *testing.T) {
-		resources := []auditResource{{arn: "arn:aws:s3:::my-bucket"}}
-		byARN, byName := buildStateLiveIndex(resources)
-		if _, ok := byARN["arn:aws:s3:::my-bucket"]; !ok {
-			t.Errorf("expected arn index entry")
-		}
-		if len(byName) != 0 {
-			t.Errorf("expected empty name index")
-		}
-	})
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			byARN, byName := buildStateLiveIndex(tc.resources)
+			if tc.wantARNKey == "" {
+				if len(byARN) != tc.wantARNLen {
+					t.Errorf("expected arn index len %d, got %d", tc.wantARNLen, len(byARN))
+				}
+			} else if _, ok := byARN[tc.wantARNKey]; !ok {
+				t.Errorf("expected arn index entry")
+			}
 
-	t.Run("name only", func(t *testing.T) {
-		resources := []auditResource{{name: "My-Bucket"}}
-		byARN, byName := buildStateLiveIndex(resources)
-		if len(byARN) != 0 {
-			t.Errorf("expected empty arn index")
-		}
-		if _, ok := byName["my-bucket"]; !ok {
-			t.Errorf("expected lowercased name index entry")
-		}
-	})
-
-	t.Run("both arn and name", func(t *testing.T) {
-		resources := []auditResource{{arn: "arn:aws:s3:::bkt", name: "bkt"}}
-		byARN, byName := buildStateLiveIndex(resources)
-		if _, ok := byARN["arn:aws:s3:::bkt"]; !ok {
-			t.Errorf("expected arn index entry")
-		}
-		if _, ok := byName["bkt"]; !ok {
-			t.Errorf("expected name index entry")
-		}
-	})
-
-	t.Run("multiple resources with same name", func(t *testing.T) {
-		resources := []auditResource{
-			{name: "shared"},
-			{name: "shared"},
-		}
-		_, byName := buildStateLiveIndex(resources)
-		if len(byName["shared"]) != 2 {
-			t.Errorf("expected 2 entries for same name, got %d", len(byName["shared"]))
-		}
-	})
+			if tc.wantNameKey == "" {
+				if len(byName) != tc.wantNameLen {
+					t.Errorf("expected name index len %d, got %d", tc.wantNameLen, len(byName))
+				}
+				return
+			}
+			entries, ok := byName[tc.wantNameKey]
+			if !ok {
+				t.Errorf("expected name index entry")
+				return
+			}
+			if tc.wantNameEntries > 0 && len(entries) != tc.wantNameEntries {
+				t.Errorf("expected 2 entries for same name, got %d", len(entries))
+			}
+		})
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -774,11 +775,11 @@ func TestDoctorStateDoctorDriftChecks(t *testing.T) {
 	emptyARN := map[string]auditResource{}
 	emptyName := map[string][]auditResource{}
 	liveByNameLocal := map[string][]auditResource{
-		"new-bucket": {{name: "new-bucket"}},
+		testDoctorNewBucketName: {{name: testDoctorNewBucketName}},
 	}
-	newARN := "arn:aws:s3:::new-bucket"
+	newARN := "arn:aws:s3:::" + testDoctorNewBucketName
 	liveByARNLocal := map[string]auditResource{
-		newARN: {arn: newARN, name: "new-bucket"},
+		newARN: {arn: newARN, name: testDoctorNewBucketName},
 	}
 
 	testCases := []doctorStateDoctorDriftCheckCase{
@@ -795,21 +796,21 @@ func TestDoctorStateDoctorDriftChecks(t *testing.T) {
 			name: "not in state, live present, status MISSING -> outside-state check",
 			mode: mode,
 			expected: []expectedAuditResource{{
-				address: "aws_s3_bucket.mybucket", status: "MISSING",
+				address: testDoctorBucketAddress, status: "MISSING",
 				name: testDoctorExistingBucketName, arn: testDoctorExistingBucketARN,
 			}},
 			stateByAddr:     map[string]terraformStateObject{},
 			liveByARN:       liveByARN,
 			liveByName:      liveByName,
 			wantCheckCount:  1,
-			wantFirstKey:    "state.outside-state.aws_s3_bucket.mybucket",
+			wantFirstKey:    "state.outside-state." + testDoctorBucketAddress,
 			wantFirstStatus: "fail",
 		},
 		{
 			name: "not in state, live present, status MISSING -> warn in lenient mode",
 			mode: lenientMode,
 			expected: []expectedAuditResource{{
-				address: "aws_s3_bucket.mybucket", status: "MISSING",
+				address: testDoctorBucketAddress, status: "MISSING",
 				name: testDoctorExistingBucketName, arn: testDoctorExistingBucketARN,
 			}},
 			stateByAddr:     map[string]terraformStateObject{},
@@ -822,29 +823,29 @@ func TestDoctorStateDoctorDriftChecks(t *testing.T) {
 			name: "not in state, live present, not MISSING -> missing-address check",
 			mode: mode,
 			expected: []expectedAuditResource{{
-				address: "aws_s3_bucket.mybucket", status: "OK",
+				address: testDoctorBucketAddress, status: "OK",
 				name: testDoctorExistingBucketName, arn: testDoctorExistingBucketARN,
 			}},
 			stateByAddr:    map[string]terraformStateObject{},
 			liveByARN:      liveByARN,
 			liveByName:     liveByName,
 			wantCheckCount: 1,
-			wantFirstKey:   "state.missing-address.aws_s3_bucket.mybucket",
+			wantFirstKey:   "state.missing-address." + testDoctorBucketAddress,
 		},
 		{
 			name:           "in state, not live, status OK -> deleted-live check",
 			mode:           mode,
-			expected:       []expectedAuditResource{{address: "aws_s3_bucket.gone", status: "OK", name: "gone-bucket"}},
-			stateByAddr:    map[string]terraformStateObject{"aws_s3_bucket.gone": {Address: "aws_s3_bucket.gone", Name: "gone-bucket"}},
+			expected:       []expectedAuditResource{{address: testDoctorGoneBucketAddress, status: "OK", name: "gone-bucket"}},
+			stateByAddr:    map[string]terraformStateObject{testDoctorGoneBucketAddress: {Address: testDoctorGoneBucketAddress, Name: "gone-bucket"}},
 			liveByARN:      emptyARN,
 			liveByName:     emptyName,
 			wantCheckCount: 1,
-			wantFirstKey:   "state.deleted-live.aws_s3_bucket.gone",
+			wantFirstKey:   "state.deleted-live." + testDoctorGoneBucketAddress,
 		},
 		{
 			name:           "stale name check",
 			mode:           mode,
-			expected:       []expectedAuditResource{{address: testDoctorBucketBAddress, status: "OK", name: "new-bucket"}},
+			expected:       []expectedAuditResource{{address: testDoctorBucketBAddress, status: "OK", name: testDoctorNewBucketName}},
 			stateByAddr:    map[string]terraformStateObject{testDoctorBucketBAddress: {Address: testDoctorBucketBAddress, Name: "old-bucket"}},
 			liveByARN:      emptyARN,
 			liveByName:     liveByNameLocal,
@@ -864,12 +865,12 @@ func TestDoctorStateDoctorDriftChecks(t *testing.T) {
 		{
 			name:        "returns expectedAddresses map",
 			mode:        mode,
-			expected:    []expectedAuditResource{{address: "aws_s3_bucket.a", status: "OK"}, {address: testDoctorBucketBAddress, status: "OK"}},
+			expected:    []expectedAuditResource{{address: testDoctorBucketAAddress, status: "OK"}, {address: testDoctorBucketBAddress, status: "OK"}},
 			stateByAddr: map[string]terraformStateObject{},
 			liveByARN:   emptyARN,
 			liveByName:  emptyName,
 			wantAddresses: map[string]bool{
-				"aws_s3_bucket.a":        true,
+				testDoctorBucketAAddress: true,
 				testDoctorBucketBAddress: true,
 			},
 		},
@@ -889,9 +890,9 @@ func TestDoctorStateDoctorDriftChecks(t *testing.T) {
 func TestDoctorStateDoctorStaleAddressCheck(t *testing.T) {
 	t.Run("no stale addresses", func(t *testing.T) {
 		stateByAddr := map[string]terraformStateObject{
-			"aws_s3_bucket.a": {Address: "aws_s3_bucket.a", Type: "aws_s3_bucket"},
+			testDoctorBucketAAddress: {Address: testDoctorBucketAAddress, Type: "aws_s3_bucket"},
 		}
-		expected := map[string]bool{"aws_s3_bucket.a": true}
+		expected := map[string]bool{testDoctorBucketAAddress: true}
 		got := stateDoctorStaleAddressCheck(stateByAddr, expected)
 		if got.Status != "ok" {
 			t.Errorf("Status=%q want ok", got.Status)
@@ -900,10 +901,10 @@ func TestDoctorStateDoctorStaleAddressCheck(t *testing.T) {
 
 	t.Run("some stale addresses", func(t *testing.T) {
 		stateByAddr := map[string]terraformStateObject{
-			"aws_s3_bucket.a":        {Address: "aws_s3_bucket.a", Type: "aws_s3_bucket"},
+			testDoctorBucketAAddress: {Address: testDoctorBucketAAddress, Type: "aws_s3_bucket"},
 			testDoctorBucketBAddress: {Address: testDoctorBucketBAddress, Type: "aws_s3_bucket"},
 		}
-		expected := map[string]bool{"aws_s3_bucket.a": true}
+		expected := map[string]bool{testDoctorBucketAAddress: true}
 		got := stateDoctorStaleAddressCheck(stateByAddr, expected)
 		if got.Status != "warn" {
 			t.Errorf("Status=%q want warn", got.Status)

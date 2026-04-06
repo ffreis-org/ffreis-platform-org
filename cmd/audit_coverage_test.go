@@ -10,6 +10,7 @@ const (
 	testAuditType  = "a-type"
 	testAuditName  = "a-name"
 	testAuditStack = "a-stack"
+	testAuditZType = "z-type"
 )
 
 // --- naming helpers ---
@@ -102,7 +103,7 @@ func TestAuditStatusCellPlainMode(t *testing.T) {
 func TestSortOtherManagedResources(t *testing.T) {
 	resources := []auditResource{
 		{stack: "z-stack", resourceType: testAuditType, name: "b-name"},
-		{stack: testAuditStack, resourceType: "z-type", name: testAuditName},
+		{stack: testAuditStack, resourceType: testAuditZType, name: testAuditName},
 		{stack: testAuditStack, resourceType: testAuditType, name: "z-name"},
 		{stack: testAuditStack, resourceType: testAuditType, name: testAuditName},
 	}
@@ -131,7 +132,7 @@ func TestSortOtherManagedResources(t *testing.T) {
 
 func TestSortUnownedResources(t *testing.T) {
 	resources := []auditResource{
-		{resourceType: "z-type", name: testAuditName},
+		{resourceType: testAuditZType, name: testAuditName},
 		{resourceType: testAuditType, name: "z-name"},
 		{resourceType: testAuditType, name: testAuditName},
 	}
@@ -139,7 +140,7 @@ func TestSortUnownedResources(t *testing.T) {
 	if resources[0].resourceType != testAuditType || resources[0].name != testAuditName {
 		t.Errorf("unexpected first element: %+v", resources[0])
 	}
-	if resources[len(resources)-1].resourceType != "z-type" {
+	if resources[len(resources)-1].resourceType != testAuditZType {
 		t.Errorf("unexpected last element: %+v", resources[len(resources)-1])
 	}
 }

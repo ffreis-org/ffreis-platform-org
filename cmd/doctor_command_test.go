@@ -21,7 +21,13 @@ import (
 	platformui "github.com/ffreis/platform-org/internal/ui"
 )
 
-const testDoctorCommandBucketName = "ffreis-tf-state-root"
+const (
+	testDoctorCommandBucketName         = "ffreis-tf-state-root"
+	testDoctorCommandBackendTitle       = "Backend Contract"
+	testDoctorCommandUnexpectedSectionf = "unexpected section: %+v"
+	testDoctorCommandUnexpectedOutputf  = "unexpected output: %q"
+	testPlatformUINewErrorf             = "platformui.New: %v"
+)
 
 func restoreDoctorTestHooks(t *testing.T) {
 	t.Helper()
@@ -67,6 +73,37 @@ func restoreDoctorTestHooks(t *testing.T) {
 		_ = doctorCmd.Flags().Set("json", "false")
 		doctorCmd.SetOut(io.Discard)
 	})
+}
+
+func assertDoctorCommandRunEResult(t *testing.T, report PlatformOrgDoctorReport, wantErr string) {
+	t.Helper()
+	restoreDoctorTestHooks(t)
+	platformOrgDoctorRunFn = func(context.Context, platformOrgDoctorMode) (PlatformOrgDoctorReport, error) {
+		return report, nil
+	}
+	d.env = testEnv
+	d.org = "ffreis"
+	d.accountID = testAccountID
+	d.region = testRegion
+	d.ui = nil
+	var out bytes.Buffer
+	doctorCmd.SetOut(&out)
+	doctorCmd.SetContext(context.Background())
+
+	err := doctorCmd.RunE(doctorCmd, nil)
+	if wantErr != "" {
+		if err == nil || err.Error() != wantErr {
+			t.Fatalf("doctorCmd.RunE() error = %v", err)
+		}
+		return
+	}
+	if err != nil {
+		t.Fatalf("doctorCmd.RunE: %v", err)
+	}
+	got := out.String()
+	if !strings.Contains(got, "Platform Org Doctor") || !strings.Contains(got, "Integrity Summary: ok=1") {
+		t.Fatalf(testDoctorCommandUnexpectedOutputf, got)
+	}
 }
 
 func testDoctorPlanJSON() []byte {
@@ -224,7 +261,7 @@ func TestDoctorCommandRunEPlainAndFailure(t *testing.T) {
 			name: "success",
 			report: PlatformOrgDoctorReport{
 				Mode:     "doctor",
-				Sections: []platformOrgDoctorSection{{Title: "Backend Contract", Checks: []platformOrgDoctorCheck{{Status: "ok", Title: "ok", Detail: "fine"}}}},
+				Sections: []platformOrgDoctorSection{{Title: testDoctorCommandBackendTitle, Checks: []platformOrgDoctorCheck{{Status: "ok", Title: "ok", Detail: "fine"}}}},
 				Summary:  platformOrgDoctorSummary{OK: 1, Total: 1},
 			},
 		},
@@ -232,7 +269,7 @@ func TestDoctorCommandRunEPlainAndFailure(t *testing.T) {
 			name: "blocking failure",
 			report: PlatformOrgDoctorReport{
 				Mode:     "doctor",
-				Sections: []platformOrgDoctorSection{{Title: "Backend Contract", Checks: []platformOrgDoctorCheck{{Status: "fail", Title: "broken", Detail: "nope", Blocking: true}}}},
+				Sections: []platformOrgDoctorSection{{Title: testDoctorCommandBackendTitle, Checks: []platformOrgDoctorCheck{{Status: "fail", Title: "broken", Detail: "nope", Blocking: true}}}},
 				Summary:  platformOrgDoctorSummary{Fail: 1, Total: 1},
 			},
 			wantErr: "doctor found 1 blocking integrity issue(s)",
@@ -241,33 +278,7 @@ func TestDoctorCommandRunEPlainAndFailure(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			restoreDoctorTestHooks(t)
-			platformOrgDoctorRunFn = func(context.Context, platformOrgDoctorMode) (PlatformOrgDoctorReport, error) {
-				return tc.report, nil
-			}
-			d.env = testEnv
-			d.org = "ffreis"
-			d.accountID = testAccountID
-			d.region = testRegion
-			d.ui = nil
-			var out bytes.Buffer
-			doctorCmd.SetOut(&out)
-			doctorCmd.SetContext(context.Background())
-
-			err := doctorCmd.RunE(doctorCmd, nil)
-			if tc.wantErr == "" {
-				if err != nil {
-					t.Fatalf("doctorCmd.RunE: %v", err)
-				}
-				got := out.String()
-				if !strings.Contains(got, "Platform Org Doctor") || !strings.Contains(got, "Integrity Summary: ok=1") {
-					t.Fatalf("unexpected output: %q", got)
-				}
-				return
-			}
-			if err == nil || err.Error() != tc.wantErr {
-				t.Fatalf("doctorCmd.RunE() error = %v", err)
-			}
+			assertDoctorCommandRunEResult(t, tc.report, tc.wantErr)
 		})
 	}
 }
@@ -323,8 +334,8 @@ func TestPlatformOrgBackendDoctorSectionHealthy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("platformOrgBackendDoctorSection: %v", err)
 	}
-	if section.Title != "Backend Contract" || len(section.Checks) < 6 {
-		t.Fatalf("unexpected section: %+v", section)
+	if section.Title != testDoctorCommandBackendTitle || len(section.Checks) < 6 {
+		t.Fatalf(testDoctorCommandUnexpectedSectionf, section)
 	}
 	if section.Checks[2].Status != "ok" {
 		t.Fatalf("expected backend identity ok, got %+v", section.Checks[2])
@@ -560,11 +571,11 @@ func TestPlatformOrgDoctorStatusCellRichMode(t *testing.T) {
 	t.Setenv("NO_COLOR", "")
 	ui, err := platformui.New(platformui.ModeRich)
 	if err != nil {
-		t.Fatalf("platformui.New: %v", err)
+		t.Fatalf(testPlatformUINewErrorf, err)
 	}
 	d.ui = ui
 	for _, status := range []string{"ok", "warn", "fail", "info"} {
-		if got := platformOrgDoctorStatusCell(status); got == "" {
+		if platformOrgDoctorStatusCell(status) == "" {
 			t.Fatalf("empty rich badge for %q", status)
 		}
 	}

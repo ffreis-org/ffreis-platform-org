@@ -13,7 +13,15 @@ import (
 	cctypes "github.com/aws/aws-sdk-go-v2/service/cloudcontrol/types"
 )
 
-const testPurgeParameterARN = "arn:aws:ssm:us-east-1:123456789012:parameter/my-param"
+const (
+	testPurgeParameterARN           = "arn:aws:ssm:us-east-1:123456789012:parameter/my-param"
+	testPurgeRequestToken           = "token-1"
+	testPurgeRunEErrorf             = "purgeCmd.RunE() error = %v"
+	testPurgeRunEUnexpectedErrorf   = "purgeCmd.RunE() unexpected error: %v"
+	testPurgeUnexpectedOutputErrorf = "unexpected output: %q"
+	testPurgeParameterResourceType  = "ssm/parameter"
+	testPurgeParameterName          = "/my-param"
+)
 
 type mockCloudControlAPI struct {
 	deleteFn func(context.Context, *cloudcontrol.DeleteResourceInput, ...func(*cloudcontrol.Options)) (*cloudcontrol.DeleteResourceOutput, error)
@@ -98,7 +106,7 @@ func TestWaitForDeleteRetriesThenSucceeds(t *testing.T) {
 		},
 	}
 
-	if err := waitForDelete(context.Background(), cc, "token-1"); err != nil {
+	if err := waitForDelete(context.Background(), cc, testPurgeRequestToken); err != nil {
 		t.Fatalf("waitForDelete() unexpected error: %v", err)
 	}
 	if statusCalls != 3 {
@@ -118,7 +126,7 @@ func TestWaitForDeleteFailureStatus(t *testing.T) {
 		},
 	}
 
-	err := waitForDelete(context.Background(), cc, "token-1")
+	err := waitForDelete(context.Background(), cc, testPurgeRequestToken)
 	if err == nil || !strings.Contains(err.Error(), "delete failed: dependency violation") {
 		t.Fatalf("waitForDelete() error = %v", err)
 	}
@@ -133,7 +141,7 @@ func TestDeleteResourceWithRetryRetriesThenSucceeds(t *testing.T) {
 			if deleteCalls < 3 {
 				return nil, errors.New("Too Many Requests")
 			}
-			return &cloudcontrol.DeleteResourceOutput{ProgressEvent: &cctypes.ProgressEvent{RequestToken: sdkaws.String("token-1")}}, nil
+			return &cloudcontrol.DeleteResourceOutput{ProgressEvent: &cctypes.ProgressEvent{RequestToken: sdkaws.String(testPurgeRequestToken)}}, nil
 		},
 	}
 
@@ -141,7 +149,7 @@ func TestDeleteResourceWithRetryRetriesThenSucceeds(t *testing.T) {
 	if err != nil {
 		t.Fatalf("deleteResourceWithRetry() unexpected error: %v", err)
 	}
-	if sdkaws.ToString(resp.ProgressEvent.RequestToken) != "token-1" {
+	if sdkaws.ToString(resp.ProgressEvent.RequestToken) != testPurgeRequestToken {
 		t.Fatalf("unexpected request token: %#v", resp.ProgressEvent)
 	}
 	if deleteCalls != 3 {
@@ -168,7 +176,7 @@ func TestPurgeCommandScanError(t *testing.T) {
 
 	err := purgeCmd.RunE(purgeCmd, nil)
 	if err == nil || !strings.Contains(err.Error(), "scanning resources: scan failed") {
-		t.Fatalf("purgeCmd.RunE() error = %v", err)
+		t.Fatalf(testPurgeRunEErrorf, err)
 	}
 }
 
@@ -177,10 +185,10 @@ func TestPurgeCommandNoUnownedResources(t *testing.T) {
 	purgeCmd.SetContext(context.Background())
 
 	if err := purgeCmd.RunE(purgeCmd, nil); err != nil {
-		t.Fatalf("purgeCmd.RunE() unexpected error: %v", err)
+		t.Fatalf(testPurgeRunEUnexpectedErrorf, err)
 	}
 	if !strings.Contains(out.String(), "no unowned resources found") {
-		t.Fatalf("unexpected output: %q", out.String())
+		t.Fatalf(testPurgeUnexpectedOutputErrorf, out.String())
 	}
 }
 
@@ -190,35 +198,35 @@ func TestPurgeCommandUnsupportedResourcesOnly(t *testing.T) {
 	purgeCmd.SetContext(context.Background())
 
 	if err := purgeCmd.RunE(purgeCmd, nil); err != nil {
-		t.Fatalf("purgeCmd.RunE() unexpected error: %v", err)
+		t.Fatalf(testPurgeRunEUnexpectedErrorf, err)
 	}
 	got := out.String()
 	if !strings.Contains(got, "some resource types are unsupported") || !strings.Contains(got, "no supported resource types to delete automatically") {
-		t.Fatalf("unexpected output: %q", got)
+		t.Fatalf(testPurgeUnexpectedOutputErrorf, got)
 	}
 }
 
 func TestPurgeCommandCancelledByConfirmationMismatch(t *testing.T) {
-	resources := []auditResource{{status: "UNOWNED", resourceType: "ssm/parameter", name: "/my-param", arn: testPurgeParameterARN}}
+	resources := []auditResource{{status: "UNOWNED", resourceType: testPurgeParameterResourceType, name: testPurgeParameterName, arn: testPurgeParameterARN}}
 	out := setupPurgeCommandTest(t, "nope\n", resources, nil, nil)
 	purgeCmd.SetContext(context.Background())
 
 	if err := purgeCmd.RunE(purgeCmd, nil); err != nil {
-		t.Fatalf("purgeCmd.RunE() unexpected error: %v", err)
+		t.Fatalf(testPurgeRunEUnexpectedErrorf, err)
 	}
 	if !strings.Contains(out.String(), "Cancelled.") {
-		t.Fatalf("unexpected output: %q", out.String())
+		t.Fatalf(testPurgeUnexpectedOutputErrorf, out.String())
 	}
 }
 
 func TestPurgeCommandNoInputReceived(t *testing.T) {
-	resources := []auditResource{{status: "UNOWNED", resourceType: "ssm/parameter", name: "/my-param", arn: testPurgeParameterARN}}
+	resources := []auditResource{{status: "UNOWNED", resourceType: testPurgeParameterResourceType, name: testPurgeParameterName, arn: testPurgeParameterARN}}
 	setupPurgeCommandTest(t, "", resources, nil, nil)
 	purgeCmd.SetContext(context.Background())
 
 	err := purgeCmd.RunE(purgeCmd, nil)
 	if err == nil || !strings.Contains(err.Error(), "no input received") {
-		t.Fatalf("purgeCmd.RunE() error = %v", err)
+		t.Fatalf(testPurgeRunEErrorf, err)
 	}
 }
 
@@ -232,13 +240,13 @@ func TestPurgeCommandDeletesSupportedResource(t *testing.T) {
 			if got := sdkaws.ToString(input.TypeName); got != "AWS::SSM::Parameter" {
 				t.Fatalf("TypeName = %q", got)
 			}
-			if got := sdkaws.ToString(input.Identifier); got != "/my-param" {
+			if got := sdkaws.ToString(input.Identifier); got != testPurgeParameterName {
 				t.Fatalf("Identifier = %q", got)
 			}
 			if !strings.HasPrefix(sdkaws.ToString(input.ClientToken), "platform-org-purge-") {
 				t.Fatalf("ClientToken = %q", sdkaws.ToString(input.ClientToken))
 			}
-			return &cloudcontrol.DeleteResourceOutput{ProgressEvent: &cctypes.ProgressEvent{RequestToken: sdkaws.String("token-1")}}, nil
+			return &cloudcontrol.DeleteResourceOutput{ProgressEvent: &cctypes.ProgressEvent{RequestToken: sdkaws.String(testPurgeRequestToken)}}, nil
 		},
 		statusFn: func(context.Context, *cloudcontrol.GetResourceRequestStatusInput, ...func(*cloudcontrol.Options)) (*cloudcontrol.GetResourceRequestStatusOutput, error) {
 			statusCalls++
@@ -248,19 +256,19 @@ func TestPurgeCommandDeletesSupportedResource(t *testing.T) {
 			return &cloudcontrol.GetResourceRequestStatusOutput{ProgressEvent: &cctypes.ProgressEvent{OperationStatus: cctypes.OperationStatusSuccess}}, nil
 		},
 	}
-	resources := []auditResource{{status: "UNOWNED", resourceType: "ssm/parameter", name: "/my-param", arn: testPurgeParameterARN}}
+	resources := []auditResource{{status: "UNOWNED", resourceType: testPurgeParameterResourceType, name: testPurgeParameterName, arn: testPurgeParameterARN}}
 	out := setupPurgeCommandTest(t, "purge\n", resources, nil, cc)
 	purgeCmd.SetContext(context.Background())
 
 	if err := purgeCmd.RunE(purgeCmd, nil); err != nil {
-		t.Fatalf("purgeCmd.RunE() unexpected error: %v", err)
+		t.Fatalf(testPurgeRunEUnexpectedErrorf, err)
 	}
 	if deleteCalls != 1 || statusCalls != 2 {
 		t.Fatalf("deleteCalls=%d statusCalls=%d", deleteCalls, statusCalls)
 	}
 	got := out.String()
-	if !strings.Contains(got, "will delete 1 resource(s) via Cloud Control API") || !strings.Contains(got, "deleted ssm/parameter /my-param") {
-		t.Fatalf("unexpected output: %q", got)
+	if !strings.Contains(got, "will delete 1 resource(s) via Cloud Control API") || !strings.Contains(got, "deleted "+testPurgeParameterResourceType+" "+testPurgeParameterName) {
+		t.Fatalf(testPurgeUnexpectedOutputErrorf, got)
 	}
 }
 
@@ -270,15 +278,15 @@ func TestPurgeCommandReturnsDeletionFailures(t *testing.T) {
 			return nil, errors.New("AccessDenied")
 		},
 	}
-	resources := []auditResource{{status: "UNOWNED", resourceType: "ssm/parameter", name: "/my-param", arn: testPurgeParameterARN}}
+	resources := []auditResource{{status: "UNOWNED", resourceType: testPurgeParameterResourceType, name: testPurgeParameterName, arn: testPurgeParameterARN}}
 	out := setupPurgeCommandTest(t, "purge\n", resources, nil, cc)
 	purgeCmd.SetContext(context.Background())
 
 	err := purgeCmd.RunE(purgeCmd, nil)
 	if err == nil || !strings.Contains(err.Error(), "purge completed with 1 deletion failure") {
-		t.Fatalf("purgeCmd.RunE() error = %v", err)
+		t.Fatalf(testPurgeRunEErrorf, err)
 	}
-	if !strings.Contains(out.String(), "delete ssm/parameter /my-param: AccessDenied") {
-		t.Fatalf("unexpected output: %q", out.String())
+	if !strings.Contains(out.String(), "delete "+testPurgeParameterResourceType+" "+testPurgeParameterName+": AccessDenied") {
+		t.Fatalf(testPurgeUnexpectedOutputErrorf, out.String())
 	}
 }

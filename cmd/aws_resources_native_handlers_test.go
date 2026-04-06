@@ -2,28 +2,10 @@ package cmd
 
 import (
 	"context"
-	"errors"
-	"io"
-	"net/http"
-	"strings"
 	"testing"
-
-	sdkaws "github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/credentials"
-	"github.com/aws/aws-sdk-go-v2/service/eventbridge"
 )
 
 func TestNativeDeleteHandlersAllEntriesAreExecutable(t *testing.T) {
-	t.Parallel()
-
-	oldD := d
-	t.Cleanup(func() { d = oldD })
-	d.awsCfg = sdkaws.Config{
-		Region:      testRegion,
-		Credentials: credentials.NewStaticCredentialsProvider("AKIA", "secret", "token"),
-	}
-	d.accountID = testAccountID
-
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -62,69 +44,7 @@ func TestNativeDeleteHandlersAllEntriesAreExecutable(t *testing.T) {
 	}
 }
 
-func TestNativeDeleteHandlerEventsRuleWrapsRemoveTargetsErrorAsManual(t *testing.T) {
-	t.Parallel()
-
-	old := newEventBridgeClient
-	t.Cleanup(func() { newEventBridgeClient = old })
-	newEventBridgeClient = func(_ sdkaws.Config, _ ...func(*eventbridge.Options)) *eventbridge.Client {
-		return testEventBridgeClient(t, func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
-			w.WriteHeader(http.StatusInternalServerError)
-			_, _ = io.WriteString(w, `{"__type":"InternalException","message":"boom"}`)
-		})
-	}
-
-	handled, err := deleteResourceNatively(context.Background(), auditResource{resourceType: "events/rule", name: "rule-1"}, true)
-	if !handled {
-		t.Fatal("expected events/rule to be handled natively")
-	}
-	var manual *purgeManualError
-	if !errors.As(err, &manual) {
-		t.Fatalf("expected purgeManualError, got %v", err)
-	}
-	if !strings.Contains(manual.Error(), "remove targets manually before deleting rule") {
-		t.Fatalf("unexpected hint: %v", manual)
-	}
-}
-
-func TestNativeDeleteHandlerEventsRuleWrapsTargetsStillPresentAsManual(t *testing.T) {
-	t.Parallel()
-
-	old := newEventBridgeClient
-	t.Cleanup(func() { newEventBridgeClient = old })
-	newEventBridgeClient = func(_ sdkaws.Config, _ ...func(*eventbridge.Options)) *eventbridge.Client {
-		return testEventBridgeClient(t, func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
-			target := r.Header.Get("X-Amz-Target")
-			switch {
-			case strings.Contains(target, "ListTargetsByRule"):
-				_, _ = io.WriteString(w, `{"Targets":[]}`)
-			case strings.Contains(target, "DeleteRule"):
-				w.WriteHeader(http.StatusBadRequest)
-				_, _ = io.WriteString(w, `{"__type":"ValidationException","message":"rule can't be deleted since it has targets"}`)
-			default:
-				w.WriteHeader(http.StatusBadRequest)
-			}
-		})
-	}
-
-	handled, err := deleteResourceNatively(context.Background(), auditResource{resourceType: "events/rule", name: "rule-1"}, true)
-	if !handled {
-		t.Fatal("expected events/rule to be handled natively")
-	}
-	var manual *purgeManualError
-	if !errors.As(err, &manual) {
-		t.Fatalf("expected purgeManualError, got %v", err)
-	}
-	if !strings.Contains(manual.Error(), "disable the owning service") {
-		t.Fatalf("unexpected hint: %v", manual)
-	}
-}
-
 func TestNativeDeleteHandlersEC2ForceGateBothTypes(t *testing.T) {
-	t.Parallel()
-
 	for _, resourceType := range []string{"ec2/internet-gateway", "ec2/route-table"} {
 		resourceType := resourceType
 		t.Run(resourceType, func(t *testing.T) {

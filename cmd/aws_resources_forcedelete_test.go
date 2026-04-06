@@ -17,7 +17,14 @@ import (
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
-const ecsDeleteTaskDefinitionsTarget = "AmazonEC2ContainerServiceV20141113.DeleteTaskDefinitions"
+const (
+	ecsDeleteTaskDefinitionsTarget      = "AmazonEC2ContainerServiceV20141113.DeleteTaskDefinitions"
+	testForceDeleteECSTaskDefinitionARN = "arn:aws:ecs:us-east-1:123:task-definition/my:1"
+	testECSDescribeTaskTarget           = "AmazonEC2ContainerServiceV20141113.DescribeTaskDefinition"
+	testAWSHeaderTarget                 = "X-Amz-Target"
+	testECSTaskDefinitionResourceType   = "ecs/task-definition"
+	testExpectedExistsTrue              = "expected exists=true"
+)
 
 func testECSClient(t *testing.T, handler http.HandlerFunc) *ecs.Client {
 	t.Helper()
@@ -219,7 +226,7 @@ func TestDeleteECSTaskDefinitionDescribeError(t *testing.T) {
 			_, _ = io.WriteString(w, `{"__type":"AccessDeniedException","message":"Access denied"}`)
 		})
 	}
-	if err := deleteECSTaskDefinition(context.Background(), "arn:aws:ecs:us-east-1:123:task-definition/my:1"); err == nil {
+	if err := deleteECSTaskDefinition(context.Background(), testForceDeleteECSTaskDefinitionARN); err == nil {
 		t.Fatal("expected error from Describe failure")
 	}
 }
@@ -231,14 +238,14 @@ func TestDeleteECSTaskDefinitionActiveDeregisterThenDelete(t *testing.T) {
 	newECSClient = func(_ sdkaws.Config, _ ...func(*ecs.Options)) *ecs.Client {
 		return testECSClient(t, func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
-			target := r.Header.Get("X-Amz-Target")
+			target := r.Header.Get(testAWSHeaderTarget)
 			switch {
-			case target == "AmazonEC2ContainerServiceV20141113.DescribeTaskDefinition":
+			case target == testECSDescribeTaskTarget:
 				calls["describe"]++
-				_, _ = io.WriteString(w, `{"taskDefinition":{"taskDefinitionArn":"arn:aws:ecs:us-east-1:123:task-definition/my:1","status":"ACTIVE"}}`)
+				_, _ = io.WriteString(w, `{"taskDefinition":{"taskDefinitionArn":"`+testForceDeleteECSTaskDefinitionARN+`","status":"ACTIVE"}}`)
 			case target == "AmazonEC2ContainerServiceV20141113.DeregisterTaskDefinition":
 				calls["deregister"]++
-				_, _ = io.WriteString(w, `{"taskDefinition":{"taskDefinitionArn":"arn:aws:ecs:us-east-1:123:task-definition/my:1","status":"INACTIVE"}}`)
+				_, _ = io.WriteString(w, `{"taskDefinition":{"taskDefinitionArn":"`+testForceDeleteECSTaskDefinitionARN+`","status":"INACTIVE"}}`)
 			case target == ecsDeleteTaskDefinitionsTarget:
 				calls["delete"]++
 				_, _ = io.WriteString(w, `{"taskDefinitions":[],"failures":[]}`)
@@ -247,7 +254,7 @@ func TestDeleteECSTaskDefinitionActiveDeregisterThenDelete(t *testing.T) {
 			}
 		})
 	}
-	if err := deleteECSTaskDefinition(context.Background(), "arn:aws:ecs:us-east-1:123:task-definition/my:1"); err != nil {
+	if err := deleteECSTaskDefinition(context.Background(), testForceDeleteECSTaskDefinitionARN); err != nil {
 		t.Fatalf(errUnexpectedError, err)
 	}
 	if calls["describe"] != 1 || calls["deregister"] != 1 || calls["delete"] != 1 {
@@ -262,9 +269,9 @@ func TestDeleteECSTaskDefinitionInactiveSkipsDeregister(t *testing.T) {
 	newECSClient = func(_ sdkaws.Config, _ ...func(*ecs.Options)) *ecs.Client {
 		return testECSClient(t, func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
-			target := r.Header.Get("X-Amz-Target")
+			target := r.Header.Get(testAWSHeaderTarget)
 			switch {
-			case target == "AmazonEC2ContainerServiceV20141113.DescribeTaskDefinition":
+			case target == testECSDescribeTaskTarget:
 				_, _ = io.WriteString(w, `{"taskDefinition":{"taskDefinitionArn":"arn:...","status":"INACTIVE"}}`)
 			case target == "AmazonEC2ContainerServiceV20141113.DeregisterTaskDefinition":
 				deregisterCalls++
@@ -276,7 +283,7 @@ func TestDeleteECSTaskDefinitionInactiveSkipsDeregister(t *testing.T) {
 			}
 		})
 	}
-	if err := deleteECSTaskDefinition(context.Background(), "arn:aws:ecs:us-east-1:123:task-definition/my:1"); err != nil {
+	if err := deleteECSTaskDefinition(context.Background(), testForceDeleteECSTaskDefinitionARN); err != nil {
 		t.Fatalf(errUnexpectedError, err)
 	}
 	if deregisterCalls != 0 {
@@ -290,9 +297,9 @@ func TestDeleteECSTaskDefinitionDeleteFailures(t *testing.T) {
 	newECSClient = func(_ sdkaws.Config, _ ...func(*ecs.Options)) *ecs.Client {
 		return testECSClient(t, func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
-			target := r.Header.Get("X-Amz-Target")
+			target := r.Header.Get(testAWSHeaderTarget)
 			switch {
-			case target == "AmazonEC2ContainerServiceV20141113.DescribeTaskDefinition":
+			case target == testECSDescribeTaskTarget:
 				_, _ = io.WriteString(w, `{"taskDefinition":{"taskDefinitionArn":"arn:...","status":"INACTIVE"}}`)
 			case target == ecsDeleteTaskDefinitionsTarget:
 				_, _ = io.WriteString(w, `{"taskDefinitions":[],"failures":[{"arn":"arn:...","reason":"something went wrong"}]}`)
@@ -301,7 +308,7 @@ func TestDeleteECSTaskDefinitionDeleteFailures(t *testing.T) {
 			}
 		})
 	}
-	if err := deleteECSTaskDefinition(context.Background(), "arn:aws:ecs:us-east-1:123:task-definition/my:1"); err == nil {
+	if err := deleteECSTaskDefinition(context.Background(), testForceDeleteECSTaskDefinitionARN); err == nil {
 		t.Fatal("expected error from DeleteTaskDefinitions failures")
 	}
 }
@@ -317,12 +324,12 @@ func TestResourceExistsECSTaskDefinitionFound(t *testing.T) {
 			_, _ = io.WriteString(w, `{"taskDefinition":{"taskDefinitionArn":"arn:...","status":"ACTIVE"}}`)
 		})
 	}
-	exists, err := resourceExists(context.Background(), auditResource{resourceType: "ecs/task-definition", arn: "arn:aws:ecs:us-east-1:123:task-definition/my:1"})
+	exists, err := resourceExists(context.Background(), auditResource{resourceType: testECSTaskDefinitionResourceType, arn: testForceDeleteECSTaskDefinitionARN})
 	if err != nil {
 		t.Fatalf(errUnexpectedError, err)
 	}
 	if !exists {
-		t.Fatal("expected exists=true")
+		t.Fatal(testExpectedExistsTrue)
 	}
 }
 
@@ -336,7 +343,7 @@ func TestResourceExistsECSTaskDefinitionNotFound(t *testing.T) {
 			_, _ = io.WriteString(w, `{"__type":"ClientException","message":"task definition not found"}`)
 		})
 	}
-	exists, err := resourceExists(context.Background(), auditResource{resourceType: "ecs/task-definition", arn: "arn:..."})
+	exists, err := resourceExists(context.Background(), auditResource{resourceType: testECSTaskDefinitionResourceType, arn: "arn:..."})
 	if err != nil {
 		t.Fatalf(errUnexpectedError, err)
 	}
@@ -355,7 +362,7 @@ func TestResourceExistsECSTaskDefinitionError(t *testing.T) {
 			_, _ = io.WriteString(w, `{"__type":"AccessDeniedException","message":"Access denied"}`)
 		})
 	}
-	exists, err := resourceExists(context.Background(), auditResource{resourceType: "ecs/task-definition", arn: "arn:..."})
+	exists, err := resourceExists(context.Background(), auditResource{resourceType: testECSTaskDefinitionResourceType, arn: "arn:..."})
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -378,7 +385,7 @@ func TestResourceExistsLightsailStaticIpFound(t *testing.T) {
 		t.Fatalf(errUnexpectedError, err)
 	}
 	if !exists {
-		t.Fatal("expected exists=true")
+		t.Fatal(testExpectedExistsTrue)
 	}
 }
 

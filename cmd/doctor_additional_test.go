@@ -19,7 +19,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/scheduler"
 )
 
-const testDoctorStateKey = "state.tfstate"
+const (
+	testDoctorStateKey               = "state.tfstate"
+	testDoctorAdditionalBackendTitle = "Backend Contract"
+)
 
 func testIAMConfig(t *testing.T, handler http.HandlerFunc) sdkaws.Config {
 	t.Helper()
@@ -74,8 +77,8 @@ func TestPlatformOrgBackendDoctorSectionBackendConfigFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("platformOrgBackendDoctorSection: %v", err)
 	}
-	if section.Title != "Backend Contract" {
-		t.Fatalf("Title = %q, want %q", section.Title, "Backend Contract")
+	if section.Title != testDoctorAdditionalBackendTitle {
+		t.Fatalf("Title = %q, want %q", section.Title, testDoctorAdditionalBackendTitle)
 	}
 	if len(section.Checks) < 3 {
 		t.Fatalf("expected backend checks plus contract failure, got %d checks", len(section.Checks))
@@ -273,7 +276,7 @@ func TestPrintPlatformOrgDoctorReportAndSummary(t *testing.T) {
 	out := newWriterOutput(&stdout, io.Discard, nil)
 	report := PlatformOrgDoctorReport{
 		Sections: []platformOrgDoctorSection{{
-			Title: "Backend Contract",
+			Title: testDoctorAdditionalBackendTitle,
 			Checks: []platformOrgDoctorCheck{{
 				Status: "ok",
 				Title:  "backend points at the current org and env",
@@ -287,7 +290,7 @@ func TestPrintPlatformOrgDoctorReportAndSummary(t *testing.T) {
 	printPlatformOrgDoctorSummary(out, report)
 
 	got := stdout.String()
-	if !strings.Contains(got, "Backend Contract") {
+	if !strings.Contains(got, testDoctorAdditionalBackendTitle) {
 		t.Fatalf("expected section title in output, got %q", got)
 	}
 	if !strings.Contains(got, "STATUS") || !strings.Contains(got, "CHECK") || !strings.Contains(got, "HINT") {

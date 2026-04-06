@@ -19,6 +19,7 @@ import (
 
 const (
 	testNukeBackupBucketName           = "my-bucket"
+	testNukeBackupStateKey             = "state.tfstate"
 	testNukeBackupTableName            = "my-table"
 	testNukeBackupTableFile            = "table.json"
 	testNukeBackupFileNotCreatedErrorf = "file not created: %v"
@@ -123,7 +124,7 @@ func TestCountBucketVersionsCountsVersionsAndMarkers(t *testing.T) {
 	}
 	plan := runtimeStateBackupPlan{BucketName: testNukeBackupBucketName}
 	if err := countBucketVersions(context.Background(), mock, &plan); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if plan.BucketVersionCount != 3 {
 		t.Fatalf("expected 3 versions, got %d", plan.BucketVersionCount)
@@ -214,7 +215,7 @@ func TestCountTableItemsDescribeError(t *testing.T) {
 			return nil, errors.New("access denied")
 		},
 	}
-	plan := runtimeStateBackupPlan{TableName: "my-table"}
+	plan := runtimeStateBackupPlan{TableName: testNukeBackupTableName}
 	if err := countTableItems(context.Background(), mock, &plan); err == nil {
 		t.Fatal("expected error for DescribeTable failure")
 	}
@@ -230,9 +231,9 @@ func TestCountTableItemsCountsItems(t *testing.T) {
 			return &dynamodb.ScanOutput{Count: 7}, nil
 		},
 	}
-	plan := runtimeStateBackupPlan{TableName: "my-table"}
+	plan := runtimeStateBackupPlan{TableName: testNukeBackupTableName}
 	if err := countTableItems(context.Background(), mock, &plan); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if plan.TableItemCount != 7 {
 		t.Fatalf("expected item count 7, got %d", plan.TableItemCount)
@@ -249,7 +250,7 @@ func TestCountTableItemsScanError(t *testing.T) {
 			return nil, errors.New("scan failed")
 		},
 	}
-	plan := runtimeStateBackupPlan{TableName: "my-table"}
+	plan := runtimeStateBackupPlan{TableName: testNukeBackupTableName}
 	if err := countTableItems(context.Background(), mock, &plan); err == nil {
 		t.Fatal("expected error from Scan failure")
 	}
@@ -273,9 +274,9 @@ func TestCountTableItemsPaginates(t *testing.T) {
 			return &dynamodb.ScanOutput{Count: 3}, nil
 		},
 	}
-	plan := runtimeStateBackupPlan{TableName: "my-table"}
+	plan := runtimeStateBackupPlan{TableName: testNukeBackupTableName}
 	if err := countTableItems(context.Background(), mock, &plan); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if calls != 2 {
 		t.Fatalf("expected 2 scan calls for pagination, got %d", calls)
@@ -310,7 +311,7 @@ func TestInspectRuntimeStateStoresForNukeReturnsPopulatedPlan(t *testing.T) {
 	withNukeBackupMocks(t, s3mock, dynamoMock)
 	plan, err := inspectRuntimeStateStoresForNuke(context.Background(), sdkaws.Config{}, "myorg")
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if plan.BucketVersionCount != 1 {
 		t.Fatalf("expected 1 version, got %d", plan.BucketVersionCount)
@@ -368,8 +369,8 @@ func TestDownloadBucketVersionSuccessCreatesFile(t *testing.T) {
 			}, nil
 		},
 	}
-	if err := downloadBucketVersion(context.Background(), mock, testNukeBackupBucketName, "state.tfstate", "v1", target); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if err := downloadBucketVersion(context.Background(), mock, testNukeBackupBucketName, testNukeBackupStateKey, "v1", target); err != nil {
+		t.Fatalf(errUnexpectedError, err)
 	}
 	data, err := os.ReadFile(target)
 	if err != nil {
@@ -417,7 +418,7 @@ func TestBackupBucketVersionsDownloadsVersionsAndReturnsMetadata(t *testing.T) {
 		listObjectVersionsFn: func(_ context.Context, _ *s3.ListObjectVersionsInput, _ ...func(*s3.Options)) (*s3.ListObjectVersionsOutput, error) {
 			return &s3.ListObjectVersionsOutput{
 				Versions: []s3types.ObjectVersion{
-					{Key: sdkaws.String("state.tfstate"), VersionId: sdkaws.String("v1"), IsLatest: sdkaws.Bool(true), Size: sdkaws.Int64(42)},
+					{Key: sdkaws.String(testNukeBackupStateKey), VersionId: sdkaws.String("v1"), IsLatest: sdkaws.Bool(true), Size: sdkaws.Int64(42)},
 				},
 				IsTruncated: sdkaws.Bool(false),
 			}, nil
@@ -430,12 +431,12 @@ func TestBackupBucketVersionsDownloadsVersionsAndReturnsMetadata(t *testing.T) {
 	}
 	metadata, err := backupBucketVersions(context.Background(), mock, testNukeBackupBucketName, dir)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if len(metadata) != 1 {
 		t.Fatalf("expected 1 metadata entry, got %d", len(metadata))
 	}
-	if metadata[0]["key"] != "state.tfstate" {
+	if metadata[0]["key"] != testNukeBackupStateKey {
 		t.Fatalf("unexpected key in metadata: %v", metadata[0]["key"])
 	}
 	if metadata[0]["version_id"] != "v1" {

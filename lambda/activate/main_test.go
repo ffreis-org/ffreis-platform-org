@@ -16,6 +16,12 @@ import (
 	"github.com/ffreis/platform-org/internal/activation"
 )
 
+const (
+	testPlatformEventsTopicARN = "arn:aws:sns:us-east-1:123456789012:platform-events"
+	testLambdaUnexpectedLogsf  = "unexpected logs: %s"
+	testLambdaActivationFailed = "activation failed"
+)
+
 func stubLambdaConfig() sdkaws.Config {
 	return sdkaws.Config{
 		Region:      "us-east-1",
@@ -65,7 +71,7 @@ func TestHandlerReturnsConfigError(t *testing.T) {
 func TestHandlerReturnsNotReadyAndPublishesRetryMessage(t *testing.T) {
 	resetLambdaActivateHooks(t)
 	logs := captureLogs(t)
-	t.Setenv("PLATFORM_EVENTS_TOPIC_ARN", "arn:aws:sns:us-east-1:123456789012:platform-events")
+	t.Setenv("PLATFORM_EVENTS_TOPIC_ARN", testPlatformEventsTopicARN)
 	loadDefaultConfigFn = func(context.Context, ...func(*sdkconfig.LoadOptions) error) (sdkaws.Config, error) {
 		return stubLambdaConfig(), nil
 	}
@@ -90,38 +96,38 @@ func TestHandlerReturnsNotReadyAndPublishesRetryMessage(t *testing.T) {
 		t.Fatal("expected not-ready notification publish")
 	}
 	if !strings.Contains(logs.String(), "cost allocation tags not ready yet") {
-		t.Fatalf("unexpected logs: %s", logs.String())
+		t.Fatalf(testLambdaUnexpectedLogsf, logs.String())
 	}
 }
 
 func TestHandlerReturnsFailureAndPublishesFailureMessage(t *testing.T) {
 	resetLambdaActivateHooks(t)
 	logs := captureLogs(t)
-	t.Setenv("PLATFORM_EVENTS_TOPIC_ARN", "arn:aws:sns:us-east-1:123456789012:platform-events")
+	t.Setenv("PLATFORM_EVENTS_TOPIC_ARN", testPlatformEventsTopicARN)
 	loadDefaultConfigFn = func(context.Context, ...func(*sdkconfig.LoadOptions) error) (sdkaws.Config, error) {
 		return stubLambdaConfig(), nil
 	}
 	activateCostTagsFn = func(context.Context, sdkaws.Config) error {
-		return errors.New("activation failed")
+		return errors.New(testLambdaActivationFailed)
 	}
 	called := false
 	publishNotificationFn = func(_ context.Context, _ sdkaws.Config, _ string, subject, msg string) error {
 		called = true
-		if !strings.Contains(subject, "FAILED") || !strings.Contains(msg, "activation failed") {
+		if !strings.Contains(subject, "FAILED") || !strings.Contains(msg, testLambdaActivationFailed) {
 			t.Fatalf("unexpected publish payload: subject=%q msg=%q", subject, msg)
 		}
 		return nil
 	}
 
 	err := handler(context.Background(), nil)
-	if err == nil || err.Error() != "activation failed" {
+	if err == nil || err.Error() != testLambdaActivationFailed {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !called {
 		t.Fatal("expected failure notification publish")
 	}
-	if !strings.Contains(logs.String(), "activation failed") {
-		t.Fatalf("unexpected logs: %s", logs.String())
+	if !strings.Contains(logs.String(), testLambdaActivationFailed) {
+		t.Fatalf(testLambdaUnexpectedLogsf, logs.String())
 	}
 }
 
@@ -142,14 +148,14 @@ func TestHandlerSucceedsWithoutTopic(t *testing.T) {
 		t.Fatalf("handler: %v", err)
 	}
 	if !strings.Contains(logs.String(), "activated successfully") {
-		t.Fatalf("unexpected logs: %s", logs.String())
+		t.Fatalf(testLambdaUnexpectedLogsf, logs.String())
 	}
 }
 
 func TestHandlerIgnoresPublishErrorOnSuccess(t *testing.T) {
 	resetLambdaActivateHooks(t)
 	logs := captureLogs(t)
-	t.Setenv("PLATFORM_EVENTS_TOPIC_ARN", "arn:aws:sns:us-east-1:123456789012:platform-events")
+	t.Setenv("PLATFORM_EVENTS_TOPIC_ARN", testPlatformEventsTopicARN)
 	loadDefaultConfigFn = func(context.Context, ...func(*sdkconfig.LoadOptions) error) (sdkaws.Config, error) {
 		return stubLambdaConfig(), nil
 	}
@@ -162,7 +168,7 @@ func TestHandlerIgnoresPublishErrorOnSuccess(t *testing.T) {
 		t.Fatalf("handler: %v", err)
 	}
 	if !strings.Contains(logs.String(), "failed to publish SNS notification") {
-		t.Fatalf("unexpected logs: %s", logs.String())
+		t.Fatalf(testLambdaUnexpectedLogsf, logs.String())
 	}
 }
 

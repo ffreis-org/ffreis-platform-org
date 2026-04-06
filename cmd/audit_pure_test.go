@@ -15,8 +15,16 @@ import (
 
 const (
 	testAuditBucketARN                  = "arn:aws:s3:::my-bucket"
+	testAuditBucketARNOnly              = "arn:aws:s3:::bucket"
+	testAuditBucketName                 = "my-bucket"
 	testAuditOrgName                    = "my-org"
 	testAuditGroupName                  = "my-org-platform-org"
+	testAuditResourceName               = "my-resource"
+	testAuditTableName                  = "my-table"
+	testAuditAddressB                   = "addr-b"
+	testAuditAddressY                   = "addr-y"
+	testAuditOKNoIssuesErrorf           = "expected OK with no issues, got status=%q issues=%v"
+	testAuditGenericResourceAddress     = "some_resource.x"
 	testUnexpectedMatchedResourceErrorf = "unexpected matched resource: %#v"
 )
 
@@ -95,9 +103,9 @@ func TestAddDiscoveredMatchCandidateNoARNNoName(t *testing.T) {
 func TestAddDiscoveredMatchCandidateARNOnly(t *testing.T) {
 	byARN := make(map[string]auditResource)
 	byName := make(map[string][]auditResource)
-	resource := auditResource{arn: "arn:aws:s3:::bucket", resourceType: "s3"}
+	resource := auditResource{arn: testAuditBucketARNOnly, resourceType: "s3"}
 	addDiscoveredMatchCandidate(byARN, byName, resource)
-	if _, ok := byARN["arn:aws:s3:::bucket"]; !ok {
+	if _, ok := byARN[testAuditBucketARNOnly]; !ok {
 		t.Fatal("expected resource to be in ARN index")
 	}
 	if len(byName) != 0 {
@@ -123,16 +131,16 @@ func TestAddDiscoveredMatchCandidateNameOnly(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestMatchExpectedAuditResourceByARN(t *testing.T) {
-	discovered := auditResource{arn: "arn:aws:s3:::bucket", name: "bucket", status: "OK"}
-	byARN := map[string]auditResource{"arn:aws:s3:::bucket": discovered}
+	discovered := auditResource{arn: testAuditBucketARNOnly, name: "bucket", status: "OK"}
+	byARN := map[string]auditResource{testAuditBucketARNOnly: discovered}
 	byName := map[string][]auditResource{}
 
-	def := expectedAuditResource{arn: "arn:aws:s3:::bucket", name: "bucket", stack: platformOrgStackTag}
+	def := expectedAuditResource{arn: testAuditBucketARNOnly, name: "bucket", stack: platformOrgStackTag}
 	got, ok := matchExpectedAuditResource(def, byARN, byName)
 	if !ok {
 		t.Fatal("expected match by ARN")
 	}
-	if got.arn != "arn:aws:s3:::bucket" {
+	if got.arn != testAuditBucketARNOnly {
 		t.Fatalf(testUnexpectedMatchedResourceErrorf, got)
 	}
 }
@@ -146,23 +154,23 @@ func TestMatchExpectedAuditResourceNameNoCandidates(t *testing.T) {
 }
 
 func TestMatchExpectedAuditResourceNameOnlyOneCandidate(t *testing.T) {
-	candidate := auditResource{name: "my-resource", stack: platformOrgStackTag, status: "OK"}
-	byName := map[string][]auditResource{"my-resource": {candidate}}
-	def := expectedAuditResource{name: "my-resource", stack: platformOrgStackTag}
+	candidate := auditResource{name: testAuditResourceName, stack: platformOrgStackTag, status: "OK"}
+	byName := map[string][]auditResource{testAuditResourceName: {candidate}}
+	def := expectedAuditResource{name: testAuditResourceName, stack: platformOrgStackTag}
 	got, ok := matchExpectedAuditResource(def, map[string]auditResource{}, byName)
 	if !ok {
 		t.Fatal("expected match with single candidate")
 	}
-	if got.name != "my-resource" {
+	if got.name != testAuditResourceName {
 		t.Fatalf(testUnexpectedMatchedResourceErrorf, got)
 	}
 }
 
 func TestMatchExpectedAuditResourceNameMultipleCandidatesStackMatch(t *testing.T) {
-	c1 := auditResource{name: "my-resource", stack: "other-stack", status: "OK"}
-	c2 := auditResource{name: "my-resource", stack: platformOrgStackTag, status: "WARN"}
-	byName := map[string][]auditResource{"my-resource": {c1, c2}}
-	def := expectedAuditResource{name: "my-resource", stack: platformOrgStackTag}
+	c1 := auditResource{name: testAuditResourceName, stack: "other-stack", status: "OK"}
+	c2 := auditResource{name: testAuditResourceName, stack: platformOrgStackTag, status: "WARN"}
+	byName := map[string][]auditResource{testAuditResourceName: {c1, c2}}
+	def := expectedAuditResource{name: testAuditResourceName, stack: platformOrgStackTag}
 	got, ok := matchExpectedAuditResource(def, map[string]auditResource{}, byName)
 	if !ok {
 		t.Fatal("expected match by stack disambiguation")
@@ -173,10 +181,10 @@ func TestMatchExpectedAuditResourceNameMultipleCandidatesStackMatch(t *testing.T
 }
 
 func TestMatchExpectedAuditResourceNameMultipleCandidatesNoStackMatch(t *testing.T) {
-	c1 := auditResource{name: "my-resource", stack: "stack-a", status: "OK"}
-	c2 := auditResource{name: "my-resource", stack: "stack-b", status: "OK"}
-	byName := map[string][]auditResource{"my-resource": {c1, c2}}
-	def := expectedAuditResource{name: "my-resource", stack: platformOrgStackTag}
+	c1 := auditResource{name: testAuditResourceName, stack: "stack-a", status: "OK"}
+	c2 := auditResource{name: testAuditResourceName, stack: "stack-b", status: "OK"}
+	byName := map[string][]auditResource{testAuditResourceName: {c1, c2}}
+	def := expectedAuditResource{name: testAuditResourceName, stack: platformOrgStackTag}
 	_, ok := matchExpectedAuditResource(def, map[string]auditResource{}, byName)
 	if ok {
 		t.Fatal("expected no match when multiple candidates with no stack match")
@@ -196,7 +204,7 @@ func TestMatchExpectedAuditResourceNoARNNoName(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestMatchedDiscoveredResourceKeyWithARN(t *testing.T) {
-	r := auditResource{arn: testAuditBucketARN, resourceType: "s3", name: "my-bucket", stack: platformOrgStackTag}
+	r := auditResource{arn: testAuditBucketARN, resourceType: "s3", name: testAuditBucketName, stack: platformOrgStackTag}
 	key := matchedDiscoveredResourceKey(r)
 	if !strings.HasPrefix(key, "arn:") {
 		t.Fatalf("expected key to start with 'arn:' for resource with arn, got %q", key)
@@ -207,13 +215,13 @@ func TestMatchedDiscoveredResourceKeyWithARN(t *testing.T) {
 }
 
 func TestMatchedDiscoveredResourceKeyWithoutARN(t *testing.T) {
-	r := auditResource{resourceType: "s3", name: "my-bucket", stack: platformOrgStackTag}
+	r := auditResource{resourceType: "s3", name: testAuditBucketName, stack: platformOrgStackTag}
 	key := matchedDiscoveredResourceKey(r)
 	if strings.HasPrefix(key, "arn:") {
 		t.Fatalf("expected key not to start with 'arn:' for resource without arn, got %q", key)
 	}
 	// should be stack|type|name lowercased
-	expected := platformOrgStackTag + "|s3|my-bucket"
+	expected := platformOrgStackTag + "|s3|" + testAuditBucketName
 	if key != expected {
 		t.Fatalf("expected key %q, got %q", expected, key)
 	}
@@ -237,13 +245,13 @@ func TestParseARNColonBeforeSlash(t *testing.T) {
 
 func TestParseARNSlashBeforeColon(t *testing.T) {
 	// slash appears before colon: e.g. dynamodb table
-	arn := "arn:aws:dynamodb:us-east-1:123456789012:table/my-table"
+	arn := "arn:aws:dynamodb:us-east-1:123456789012:table/" + testAuditTableName
 	rtype, name := parseARN(arn)
 	if rtype != "dynamodb/table" {
 		t.Errorf("rtype: want dynamodb/table got %q", rtype)
 	}
-	if name != "my-table" {
-		t.Errorf("name: want my-table got %q", name)
+	if name != testAuditTableName {
+		t.Errorf("name: want %s got %q", testAuditTableName, name)
 	}
 }
 
@@ -254,8 +262,8 @@ func TestParseARNServiceOnly(t *testing.T) {
 	if rtype != "s3" {
 		t.Errorf("rtype: want s3 got %q", rtype)
 	}
-	if name != "my-bucket" {
-		t.Errorf("name: want my-bucket got %q", name)
+	if name != testAuditBucketName {
+		t.Errorf("name: want %s got %q", testAuditBucketName, name)
 	}
 }
 
@@ -278,32 +286,32 @@ func TestParseARNShortARN(t *testing.T) {
 func TestSortExpectedResourcesDifferentSourceOrders(t *testing.T) {
 	defs := []expectedAuditResource{
 		{address: "addr-a", sourceOrder: 1, order: 0},
-		{address: "addr-b", sourceOrder: 0, order: 0},
+		{address: testAuditAddressB, sourceOrder: 0, order: 0},
 	}
 	resources := []auditResource{
 		{address: "addr-a", status: "OK"},
-		{address: "addr-b", status: "OK"},
+		{address: testAuditAddressB, status: "OK"},
 	}
 	sortExpectedResources(resources, defs)
 	// addr-b has lower sourceOrder (0) so it should come first
-	if resources[0].address != "addr-b" {
-		t.Errorf("expected addr-b first, got %q", resources[0].address)
+	if resources[0].address != testAuditAddressB {
+		t.Errorf("expected %s first, got %q", testAuditAddressB, resources[0].address)
 	}
 }
 
 func TestSortExpectedResourcesDifferentOrders(t *testing.T) {
 	defs := []expectedAuditResource{
 		{address: "addr-x", sourceOrder: 0, order: 2},
-		{address: "addr-y", sourceOrder: 0, order: 1},
+		{address: testAuditAddressY, sourceOrder: 0, order: 1},
 	}
 	resources := []auditResource{
 		{address: "addr-x", status: "OK"},
-		{address: "addr-y", status: "OK"},
+		{address: testAuditAddressY, status: "OK"},
 	}
 	sortExpectedResources(resources, defs)
 	// addr-y has lower order (1) so it should come first
-	if resources[0].address != "addr-y" {
-		t.Errorf("expected addr-y first, got %q", resources[0].address)
+	if resources[0].address != testAuditAddressY {
+		t.Errorf("expected %s first, got %q", testAuditAddressY, resources[0].address)
 	}
 }
 
@@ -532,7 +540,7 @@ func TestCollectTerraformPlannedResourcesExcludedType(t *testing.T) {
 func TestStatusFromTerraformChangeNoActions(t *testing.T) {
 	status, issues := statusFromTerraformChange(terraformResourceChange{})
 	if status != "OK" || len(issues) != 0 {
-		t.Fatalf("expected OK with no issues, got status=%q issues=%v", status, issues)
+		t.Fatalf(testAuditOKNoIssuesErrorf, status, issues)
 	}
 }
 
@@ -540,7 +548,7 @@ func TestStatusFromTerraformChangeNoOp(t *testing.T) {
 	change := terraformResourceChange{Change: terraformPlanChange{Actions: []string{"no-op"}}}
 	status, issues := statusFromTerraformChange(change)
 	if status != "OK" || len(issues) != 0 {
-		t.Fatalf("expected OK with no issues, got status=%q issues=%v", status, issues)
+		t.Fatalf(testAuditOKNoIssuesErrorf, status, issues)
 	}
 }
 
@@ -548,7 +556,7 @@ func TestStatusFromTerraformChangeRead(t *testing.T) {
 	change := terraformResourceChange{Change: terraformPlanChange{Actions: []string{"read"}}}
 	status, issues := statusFromTerraformChange(change)
 	if status != "OK" || len(issues) != 0 {
-		t.Fatalf("expected OK with no issues, got status=%q issues=%v", status, issues)
+		t.Fatalf(testAuditOKNoIssuesErrorf, status, issues)
 	}
 }
 
@@ -576,9 +584,9 @@ func TestStatusFromTerraformChangeReplace(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestTerraformResourceDisplayNameBucket(t *testing.T) {
-	r := terraformPlanResource{Address: "aws_s3_bucket.x", Values: map[string]any{"bucket": "my-bucket"}}
-	if got := terraformResourceDisplayName(r); got != "my-bucket" {
-		t.Errorf("bucket: want my-bucket got %q", got)
+	r := terraformPlanResource{Address: "aws_s3_bucket.x", Values: map[string]any{"bucket": testAuditBucketName}}
+	if got := terraformResourceDisplayName(r); got != testAuditBucketName {
+		t.Errorf("bucket: want %s got %q", testAuditBucketName, got)
 	}
 }
 
@@ -604,30 +612,30 @@ func TestTerraformResourceDisplayNameRole(t *testing.T) {
 }
 
 func TestTerraformResourceDisplayNameTableName(t *testing.T) {
-	r := terraformPlanResource{Address: "aws_dynamodb_table.x", Values: map[string]any{"table_name": "my-table"}}
-	if got := terraformResourceDisplayName(r); got != "my-table" {
-		t.Errorf("table_name: want my-table got %q", got)
+	r := terraformPlanResource{Address: "aws_dynamodb_table.x", Values: map[string]any{"table_name": testAuditTableName}}
+	if got := terraformResourceDisplayName(r); got != testAuditTableName {
+		t.Errorf("table_name: want %s got %q", testAuditTableName, got)
 	}
 }
 
 func TestTerraformResourceDisplayNameURL(t *testing.T) {
-	r := terraformPlanResource{Address: "some_resource.x", Values: map[string]any{"url": "https://example.com"}}
+	r := terraformPlanResource{Address: testAuditGenericResourceAddress, Values: map[string]any{"url": "https://example.com"}}
 	if got := terraformResourceDisplayName(r); got != "https://example.com" {
 		t.Errorf("url: want https://example.com got %q", got)
 	}
 }
 
 func TestTerraformResourceDisplayNameID(t *testing.T) {
-	r := terraformPlanResource{Address: "some_resource.x", Values: map[string]any{"id": "res-id-123"}}
+	r := terraformPlanResource{Address: testAuditGenericResourceAddress, Values: map[string]any{"id": "res-id-123"}}
 	if got := terraformResourceDisplayName(r); got != "res-id-123" {
 		t.Errorf("id: want res-id-123 got %q", got)
 	}
 }
 
 func TestTerraformResourceDisplayNameFallback(t *testing.T) {
-	r := terraformPlanResource{Address: "some_resource.x", Values: map[string]any{}}
-	if got := terraformResourceDisplayName(r); got != "some_resource.x" {
-		t.Errorf("fallback: want some_resource.x got %q", got)
+	r := terraformPlanResource{Address: testAuditGenericResourceAddress, Values: map[string]any{}}
+	if got := terraformResourceDisplayName(r); got != testAuditGenericResourceAddress {
+		t.Errorf("fallback: want %s got %q", testAuditGenericResourceAddress, got)
 	}
 }
 

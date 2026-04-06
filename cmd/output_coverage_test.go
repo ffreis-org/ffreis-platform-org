@@ -44,7 +44,7 @@ func TestHeaderRichDelegatesToUI(t *testing.T) {
 	t.Setenv("NO_COLOR", "")
 	ui, err := platformui.New(platformui.ModeRich)
 	if err != nil {
-		t.Fatalf("ui.New: %v", err)
+		t.Fatalf(testPlatformUINewErrorf, err)
 	}
 	var out, errBuf bytes.Buffer
 	o := newWriterOutput(&out, &errBuf, ui)
@@ -79,7 +79,7 @@ func TestSummaryRichDelegatesToUI(t *testing.T) {
 	t.Setenv("NO_COLOR", "")
 	ui, err := platformui.New(platformui.ModeRich)
 	if err != nil {
-		t.Fatalf("ui.New: %v", err)
+		t.Fatalf(testPlatformUINewErrorf, err)
 	}
 	var out, errBuf bytes.Buffer
 	o := newWriterOutput(&out, &errBuf, ui)
@@ -102,7 +102,7 @@ func TestStatusRichDelegatesToUI(t *testing.T) {
 	t.Setenv("NO_COLOR", "")
 	ui, err := platformui.New(platformui.ModeRich)
 	if err != nil {
-		t.Fatalf("ui.New: %v", err)
+		t.Fatalf(testPlatformUINewErrorf, err)
 	}
 	var out, errBuf bytes.Buffer
 	o := newWriterOutput(&out, &errBuf, ui)
@@ -125,7 +125,7 @@ func TestErrStatusRichWritesToStderr(t *testing.T) {
 	t.Setenv("NO_COLOR", "")
 	ui, err := platformui.New(platformui.ModeRich)
 	if err != nil {
-		t.Fatalf("ui.New: %v", err)
+		t.Fatalf(testPlatformUINewErrorf, err)
 	}
 	var out, errBuf bytes.Buffer
 	o := newWriterOutput(&out, &errBuf, ui)
@@ -142,7 +142,7 @@ func TestTablePlainStripANSI(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	ui, err := platformui.New(platformui.ModePlain)
 	if err != nil {
-		t.Fatalf("ui.New: %v", err)
+		t.Fatalf(testPlatformUINewErrorf, err)
 	}
 	var buf bytes.Buffer
 	out := newWriterOutput(&buf, &buf, ui)

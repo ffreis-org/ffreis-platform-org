@@ -7,19 +7,26 @@ import (
 	"testing"
 )
 
+const (
+	testPurgeBaseError          = "base error"
+	testPurgeCoverageBucketName = "my-bucket"
+	testPurgeSummaryErrorf      = "summary: %+v"
+	testPurgeCountsErrorf       = "counts: %+v"
+)
+
 func TestPurgeManualErrorWithHint(t *testing.T) {
-	cause := errors.New("base error")
+	cause := errors.New(testPurgeBaseError)
 	e := &purgeManualError{cause: cause, hint: "do this instead"}
 	got := e.Error()
-	if !strings.Contains(got, "base error") || !strings.Contains(got, "do this instead") {
+	if !strings.Contains(got, testPurgeBaseError) || !strings.Contains(got, "do this instead") {
 		t.Fatalf("purgeManualError.Error(): %q", got)
 	}
 }
 
 func TestPurgeManualErrorWithoutHint(t *testing.T) {
-	cause := errors.New("base error")
+	cause := errors.New(testPurgeBaseError)
 	e := &purgeManualError{cause: cause}
-	if e.Error() != "base error" {
+	if e.Error() != testPurgeBaseError {
 		t.Fatalf("purgeManualError.Error(): %q", e.Error())
 	}
 }
@@ -112,8 +119,8 @@ func TestLightsailToCloudControlUnknown(t *testing.T) {
 }
 
 func TestArnToCloudControlS3(t *testing.T) {
-	cfnType, id := arnToCloudControl("arn:aws:s3:::my-bucket", "s3", "s3", "my-bucket")
-	if cfnType != "AWS::S3::Bucket" || id != "my-bucket" {
+	cfnType, id := arnToCloudControl("arn:aws:s3:::"+testPurgeCoverageBucketName, "s3", "s3", testPurgeCoverageBucketName)
+	if cfnType != "AWS::S3::Bucket" || id != testPurgeCoverageBucketName {
 		t.Fatalf("arnToCloudControl(s3) = (%q, %q)", cfnType, id)
 	}
 }
@@ -137,7 +144,7 @@ func TestRecordFallbackDeleteResultDeleted(t *testing.T) {
 	summary := nukeFallbackSummary{}
 	errs := recordFallbackDeleteResult(o, auditResource{resourceType: "s3", name: "my-bucket"}, nil, &summary, nil)
 	if summary.Deleted != 1 || summary.Failed != 0 {
-		t.Fatalf("summary: %+v", summary)
+		t.Fatalf(testPurgeSummaryErrorf, summary)
 	}
 	if len(errs) != 0 {
 		t.Fatalf("unexpected errors: %v", errs)
@@ -149,7 +156,7 @@ func TestRecordFallbackDeleteResultGone(t *testing.T) {
 	summary := nukeFallbackSummary{}
 	errs := recordFallbackDeleteResult(o, auditResource{resourceType: "s3", name: "b"}, errors.New("not found"), &summary, nil)
 	if summary.Gone != 1 {
-		t.Fatalf("summary: %+v", summary)
+		t.Fatalf(testPurgeSummaryErrorf, summary)
 	}
 	if len(errs) != 0 {
 		t.Fatalf("unexpected errors: %v", errs)
@@ -161,7 +168,7 @@ func TestRecordFallbackDeleteResultFailed(t *testing.T) {
 	summary := nukeFallbackSummary{}
 	errs := recordFallbackDeleteResult(o, auditResource{resourceType: "s3", name: "b"}, errors.New("access denied"), &summary, nil)
 	if summary.Failed != 1 {
-		t.Fatalf("summary: %+v", summary)
+		t.Fatalf(testPurgeSummaryErrorf, summary)
 	}
 	if len(errs) != 1 {
 		t.Fatalf("expected 1 error, got: %v", errs)
@@ -173,7 +180,7 @@ func TestRecordPurgeDeleteResultGone(t *testing.T) {
 	counts := purgeDeleteCounts{}
 	recordPurgeDeleteResult(o, auditResource{resourceType: "s3", name: "b"}, errors.New("not found"), &counts, false)
 	if counts.gone != 1 {
-		t.Fatalf("counts: %+v", counts)
+		t.Fatalf(testPurgeCountsErrorf, counts)
 	}
 	if !strings.Contains(out.String(), "skip") {
 		t.Fatalf("expected skip in output: %q", out.String())
@@ -186,7 +193,7 @@ func TestRecordPurgeDeleteResultBlocked(t *testing.T) {
 	counts := purgeDeleteCounts{}
 	recordPurgeDeleteResult(o, auditResource{resourceType: "s3", name: "b"}, errors.New("has dependencies and cannot be deleted"), &counts, false)
 	if counts.blocked != 1 {
-		t.Fatalf("counts: %+v", counts)
+		t.Fatalf(testPurgeCountsErrorf, counts)
 	}
 	got := out.String()
 	if !strings.Contains(got, "re-run with --force") {
@@ -200,7 +207,7 @@ func TestRecordPurgeDeleteResultBlockedWithForce(t *testing.T) {
 	counts := purgeDeleteCounts{}
 	recordPurgeDeleteResult(o, auditResource{resourceType: "s3", name: "b"}, errors.New("has dependencies and cannot be deleted"), &counts, true)
 	if counts.blocked != 1 {
-		t.Fatalf("counts: %+v", counts)
+		t.Fatalf(testPurgeCountsErrorf, counts)
 	}
 	if strings.Contains(out.String(), "re-run with --force") {
 		t.Fatalf("should not show --force hint when force=true: %q", out.String())
@@ -212,6 +219,6 @@ func TestRecordPurgeDeleteResultManual(t *testing.T) {
 	counts := purgeDeleteCounts{}
 	recordPurgeDeleteResult(o, auditResource{resourceType: "s3", name: "b"}, &purgeManualError{cause: errors.New("manual")}, &counts, false)
 	if counts.manual != 1 {
-		t.Fatalf("counts: %+v", counts)
+		t.Fatalf(testPurgeCountsErrorf, counts)
 	}
 }

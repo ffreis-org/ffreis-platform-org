@@ -13,8 +13,9 @@ import (
 )
 
 const (
-	testIAMActionKey = "Action"
-	testIAMRoleName  = "my-role"
+	testIAMActionKey    = "Action"
+	testIAMRoleName     = "my-role"
+	testIAMAccessDenied = "Access denied"
 )
 
 func testIAMClient(t *testing.T, handler http.HandlerFunc) *iam.Client {
@@ -59,7 +60,7 @@ func TestDeleteAllInlineRolePoliciesOtherListError(t *testing.T) {
 	client := testIAMClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeTextXML)
 		w.WriteHeader(http.StatusForbidden)
-		_, _ = fmt.Fprintln(w, iamXMLError("AccessDenied", "Access denied"))
+		_, _ = fmt.Fprintln(w, iamXMLError("AccessDenied", testIAMAccessDenied))
 	})
 	if err := deleteAllInlineRolePolicies(context.Background(), client, testIAMRoleName); err == nil {
 		t.Fatal("expected error for access denied on list")
@@ -209,7 +210,7 @@ func TestDeleteAllInlineRolePoliciesDeleteError(t *testing.T) {
 </ListRolePoliciesResponse>`)
 		case "DeleteRolePolicy":
 			w.WriteHeader(http.StatusForbidden)
-			_, _ = fmt.Fprintln(w, iamXMLError("AccessDenied", "Access denied"))
+			_, _ = fmt.Fprintln(w, iamXMLError("AccessDenied", testIAMAccessDenied))
 		default:
 			w.WriteHeader(http.StatusInternalServerError)
 		}
@@ -238,7 +239,7 @@ func TestDetachAllManagedRolePoliciesOtherListError(t *testing.T) {
 	client := testIAMClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeTextXML)
 		w.WriteHeader(http.StatusForbidden)
-		_, _ = fmt.Fprintln(w, iamXMLError("AccessDenied", "Access denied"))
+		_, _ = fmt.Fprintln(w, iamXMLError("AccessDenied", testIAMAccessDenied))
 	})
 	if err := detachAllManagedRolePolicies(context.Background(), client, testIAMRoleName); err == nil {
 		t.Fatal("expected error for access denied on list")
@@ -413,7 +414,7 @@ func TestDetachAllManagedRolePoliciesDetachError(t *testing.T) {
 </ListAttachedRolePoliciesResponse>`)
 		case "DetachRolePolicy":
 			w.WriteHeader(http.StatusForbidden)
-			_, _ = fmt.Fprintln(w, iamXMLError("AccessDenied", "Access denied"))
+			_, _ = fmt.Fprintln(w, iamXMLError("AccessDenied", testIAMAccessDenied))
 		default:
 			w.WriteHeader(http.StatusInternalServerError)
 		}

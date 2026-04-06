@@ -9,6 +9,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const testExecuteCommandCodeErrorf = "executeCommand() code = %d, want %d"
+
 func TestExecuteCommandWithError(t *testing.T) {
 	cmd := &cobra.Command{
 		Use:           "fail-cmd",
@@ -22,7 +24,7 @@ func TestExecuteCommandWithError(t *testing.T) {
 	var stderr bytes.Buffer
 	code := executeCommand(cmd, &stderr)
 	if code != exitError {
-		t.Fatalf("executeCommand() code = %d, want %d", code, exitError)
+		t.Fatalf(testExecuteCommandCodeErrorf, code, exitError)
 	}
 	if !bytes.Contains(stderr.Bytes(), []byte("something went wrong")) {
 		t.Fatalf("expected error message in stderr, got: %q", stderr.String())
@@ -44,7 +46,7 @@ func TestExecuteCommandWithEmptyErrorMessage(t *testing.T) {
 	var stderr bytes.Buffer
 	code := executeCommand(cmd, &stderr)
 	if code != exitError {
-		t.Fatalf("executeCommand() code = %d, want %d", code, exitError)
+		t.Fatalf(testExecuteCommandCodeErrorf, code, exitError)
 	}
 	// Empty message → nothing written to stderr
 	if stderr.Len() != 0 {
@@ -59,7 +61,7 @@ func TestExecuteCommandSuccess(t *testing.T) {
 	}
 	code := executeCommand(cmd, io.Discard)
 	if code != exitOK {
-		t.Fatalf("executeCommand() code = %d, want %d", code, exitOK)
+		t.Fatalf(testExecuteCommandCodeErrorf, code, exitOK)
 	}
 }
 

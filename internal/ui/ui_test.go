@@ -153,9 +153,8 @@ func TestInteractiveAndRich(t *testing.T) {
 	}
 }
 
-func TestKeyHeaderSummaryBadgeStatus(t *testing.T) {
-	plain := testPlainPresenter()
-	rich := testRichPresenter()
+func assertKeyHeaderSummaryBadgeStatus(t *testing.T, plain, rich *Presenter) {
+	t.Helper()
 
 	if got := plain.Key("name"); got != "name" {
 		t.Fatalf("Key plain = %q", got)
@@ -202,9 +201,8 @@ func TestKeyHeaderSummaryBadgeStatus(t *testing.T) {
 	}
 }
 
-func TestDurationAndRender(t *testing.T) {
-	plain := testPlainPresenter()
-	rich := testRichPresenter()
+func assertDurationAndRender(t *testing.T, plain, rich *Presenter) {
+	t.Helper()
 
 	if got := plain.Duration(0); got != "0s" {
 		t.Fatalf("Duration zero = %q", got)
@@ -225,6 +223,18 @@ func TestDurationAndRender(t *testing.T) {
 	if got := rich.render("value", lipgloss.NewStyle().Bold(true)); !strings.Contains(got, "value") {
 		t.Fatalf("rich render = %q", got)
 	}
+}
+
+func TestKeyHeaderSummaryBadgeStatus(t *testing.T) {
+	plain := testPlainPresenter()
+	rich := testRichPresenter()
+	assertKeyHeaderSummaryBadgeStatus(t, plain, rich)
+}
+
+func TestDurationAndRender(t *testing.T) {
+	plain := testPlainPresenter()
+	rich := testRichPresenter()
+	assertDurationAndRender(t, plain, rich)
 }
 
 func TestNoColor(t *testing.T) {
