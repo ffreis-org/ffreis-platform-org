@@ -40,7 +40,7 @@ func iamXMLError(code, message string) string {
 func TestDeleteAllInlineRolePoliciesNotFoundOnList(t *testing.T) {
 	t.Parallel()
 	client := testIAMClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/xml")
+		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeTextXML)
 		w.WriteHeader(http.StatusBadRequest)
 		_, _ = fmt.Fprintln(w, iamXMLError("NoSuchEntity", "The role cannot be found."))
 	})
@@ -52,7 +52,7 @@ func TestDeleteAllInlineRolePoliciesNotFoundOnList(t *testing.T) {
 func TestDeleteAllInlineRolePoliciesOtherListError(t *testing.T) {
 	t.Parallel()
 	client := testIAMClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/xml")
+		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeTextXML)
 		w.WriteHeader(http.StatusForbidden)
 		_, _ = fmt.Fprintln(w, iamXMLError("AccessDenied", "Access denied"))
 	})
@@ -64,7 +64,7 @@ func TestDeleteAllInlineRolePoliciesOtherListError(t *testing.T) {
 func TestDeleteAllInlineRolePoliciesEmptyList(t *testing.T) {
 	t.Parallel()
 	client := testIAMClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/xml")
+		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeTextXML)
 		_ = r.ParseForm()
 		if r.FormValue("Action") != "ListRolePolicies" {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -87,7 +87,7 @@ func TestDeleteAllInlineRolePoliciesDeletesOnePolicy(t *testing.T) {
 	t.Parallel()
 	deleteCalls := 0
 	client := testIAMClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/xml")
+		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeTextXML)
 		_ = r.ParseForm()
 		switch r.FormValue("Action") {
 		case "ListRolePolicies":
@@ -119,7 +119,7 @@ func TestDeleteAllInlineRolePoliciesTruncatedList(t *testing.T) {
 	t.Parallel()
 	listCalls, deleteCalls := 0, 0
 	client := testIAMClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/xml")
+		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeTextXML)
 		_ = r.ParseForm()
 		switch r.FormValue("Action") {
 		case "ListRolePolicies":
@@ -165,7 +165,7 @@ func TestDeleteAllInlineRolePoliciesTruncatedList(t *testing.T) {
 func TestDeleteAllInlineRolePoliciesDeleteNotFound(t *testing.T) {
 	t.Parallel()
 	client := testIAMClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/xml")
+		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeTextXML)
 		_ = r.ParseForm()
 		switch r.FormValue("Action") {
 		case "ListRolePolicies":
@@ -191,7 +191,7 @@ func TestDeleteAllInlineRolePoliciesDeleteNotFound(t *testing.T) {
 func TestDeleteAllInlineRolePoliciesDeleteError(t *testing.T) {
 	t.Parallel()
 	client := testIAMClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/xml")
+		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeTextXML)
 		_ = r.ParseForm()
 		switch r.FormValue("Action") {
 		case "ListRolePolicies":
@@ -219,7 +219,7 @@ func TestDeleteAllInlineRolePoliciesDeleteError(t *testing.T) {
 func TestDetachAllManagedRolePoliciesNotFoundOnList(t *testing.T) {
 	t.Parallel()
 	client := testIAMClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/xml")
+		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeTextXML)
 		w.WriteHeader(http.StatusBadRequest)
 		_, _ = fmt.Fprintln(w, iamXMLError("NoSuchEntity", "The role cannot be found."))
 	})
@@ -231,7 +231,7 @@ func TestDetachAllManagedRolePoliciesNotFoundOnList(t *testing.T) {
 func TestDetachAllManagedRolePoliciesOtherListError(t *testing.T) {
 	t.Parallel()
 	client := testIAMClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/xml")
+		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeTextXML)
 		w.WriteHeader(http.StatusForbidden)
 		_, _ = fmt.Fprintln(w, iamXMLError("AccessDenied", "Access denied"))
 	})
@@ -243,7 +243,7 @@ func TestDetachAllManagedRolePoliciesOtherListError(t *testing.T) {
 func TestDetachAllManagedRolePoliciesEmptyList(t *testing.T) {
 	t.Parallel()
 	client := testIAMClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/xml")
+		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeTextXML)
 		_ = r.ParseForm()
 		if r.FormValue("Action") != "ListAttachedRolePolicies" {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -266,7 +266,7 @@ func TestDetachAllManagedRolePoliciesDetachesOnePolicy(t *testing.T) {
 	t.Parallel()
 	detachCalls := 0
 	client := testIAMClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/xml")
+		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeTextXML)
 		_ = r.ParseForm()
 		switch r.FormValue("Action") {
 		case "ListAttachedRolePolicies":
@@ -303,7 +303,7 @@ func TestDetachAllManagedRolePoliciesTruncatedList(t *testing.T) {
 	t.Parallel()
 	listCalls, detachCalls := 0, 0
 	client := testIAMClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/xml")
+		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeTextXML)
 		_ = r.ParseForm()
 		switch r.FormValue("Action") {
 		case "ListAttachedRolePolicies":
@@ -359,7 +359,7 @@ func TestDetachAllManagedRolePoliciesTruncatedList(t *testing.T) {
 func TestDetachAllManagedRolePoliciesDetachNotFound(t *testing.T) {
 	t.Parallel()
 	client := testIAMClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/xml")
+		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeTextXML)
 		_ = r.ParseForm()
 		switch r.FormValue("Action") {
 		case "ListAttachedRolePolicies":
@@ -390,7 +390,7 @@ func TestDetachAllManagedRolePoliciesDetachNotFound(t *testing.T) {
 func TestDetachAllManagedRolePoliciesDetachError(t *testing.T) {
 	t.Parallel()
 	client := testIAMClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/xml")
+		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeTextXML)
 		_ = r.ParseForm()
 		switch r.FormValue("Action") {
 		case "ListAttachedRolePolicies":

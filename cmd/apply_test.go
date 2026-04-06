@@ -14,6 +14,8 @@ import (
 	schedulertypes "github.com/aws/aws-sdk-go-v2/service/scheduler/types"
 )
 
+const testContentTypeJSON = "application/json"
+
 func testSchedulerCfg(t *testing.T, handler http.HandlerFunc) sdkaws.Config {
 	t.Helper()
 	server := httptest.NewServer(handler)
@@ -28,7 +30,7 @@ func testSchedulerCfg(t *testing.T, handler http.HandlerFunc) sdkaws.Config {
 
 func TestScheduleActivationUpdatesExistingSchedule(t *testing.T) {
 	cfg := testSchedulerCfg(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set(testHTTPHeaderContentType, testContentTypeJSON)
 		if r.Method == http.MethodPut {
 			_, _ = io.WriteString(w, `{"ScheduleArn":"arn:aws:scheduler:us-east-1:123:schedule/group/name"}`)
 			return
@@ -46,7 +48,7 @@ func TestScheduleActivationUpdatesExistingSchedule(t *testing.T) {
 
 func TestScheduleActivationCreatesWhenNotFound(t *testing.T) {
 	cfg := testSchedulerCfg(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set(testHTTPHeaderContentType, testContentTypeJSON)
 		switch r.Method {
 		case http.MethodPut:
 			// UpdateSchedule → ResourceNotFoundException (must include error type header)
@@ -85,7 +87,7 @@ func TestScheduleActivationReturnsUpdateError(t *testing.T) {
 
 func TestScheduleActivationReturnsCreateError(t *testing.T) {
 	cfg := testSchedulerCfg(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set(testHTTPHeaderContentType, testContentTypeJSON)
 		switch r.Method {
 		case http.MethodPut:
 			// UpdateSchedule → ResourceNotFoundException (must include error type header)

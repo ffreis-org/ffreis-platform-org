@@ -48,7 +48,7 @@ func TestForceDeleteIAMRoleNotFound(t *testing.T) {
 	t.Cleanup(func() { newIAMDeleteClient = old })
 	newIAMDeleteClient = func(_ sdkaws.Config, _ ...func(*iam.Options)) *iam.Client {
 		return testIAMClient(t, func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "text/xml")
+			w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeTextXML)
 			w.WriteHeader(http.StatusBadRequest)
 			_, _ = fmt.Fprintln(w, iamXMLError("NoSuchEntity", "The role cannot be found."))
 		})
@@ -63,7 +63,7 @@ func TestForceDeleteIAMRoleEmptyPoliciesSuccess(t *testing.T) {
 	t.Cleanup(func() { newIAMDeleteClient = old })
 	newIAMDeleteClient = func(_ sdkaws.Config, _ ...func(*iam.Options)) *iam.Client {
 		return testIAMClient(t, func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "text/xml")
+			w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeTextXML)
 			_ = r.ParseForm()
 			switch r.FormValue("Action") {
 			case "ListRolePolicies":
@@ -87,7 +87,7 @@ func TestForceDeleteIAMRoleDeleteRoleNotFound(t *testing.T) {
 	t.Cleanup(func() { newIAMDeleteClient = old })
 	newIAMDeleteClient = func(_ sdkaws.Config, _ ...func(*iam.Options)) *iam.Client {
 		return testIAMClient(t, func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "text/xml")
+			w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeTextXML)
 			_ = r.ParseForm()
 			switch r.FormValue("Action") {
 			case "ListRolePolicies":
@@ -112,7 +112,7 @@ func TestForceDeleteIAMRoleDeleteRoleError(t *testing.T) {
 	t.Cleanup(func() { newIAMDeleteClient = old })
 	newIAMDeleteClient = func(_ sdkaws.Config, _ ...func(*iam.Options)) *iam.Client {
 		return testIAMClient(t, func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "text/xml")
+			w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeTextXML)
 			_ = r.ParseForm()
 			switch r.FormValue("Action") {
 			case "ListRolePolicies":
@@ -140,7 +140,7 @@ func TestForceDeleteS3BucketEmptyBucketSuccess(t *testing.T) {
 	newS3DeleteClient = func(_ sdkaws.Config, _ ...func(*s3.Options)) *s3.Client {
 		return testS3DeleteClient(t, func(w http.ResponseWriter, r *http.Request) {
 			if r.Method == http.MethodGet {
-				w.Header().Set("Content-Type", "application/xml")
+				w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeXML)
 				_, _ = io.WriteString(w, `<?xml version="1.0"?><ListVersionsResult><IsTruncated>false</IsTruncated></ListVersionsResult>`)
 				return
 			}
@@ -158,11 +158,11 @@ func TestForceDeleteS3BucketDeleteBucketNoSuchBucket(t *testing.T) {
 	newS3DeleteClient = func(_ sdkaws.Config, _ ...func(*s3.Options)) *s3.Client {
 		return testS3DeleteClient(t, func(w http.ResponseWriter, r *http.Request) {
 			if r.Method == http.MethodGet {
-				w.Header().Set("Content-Type", "application/xml")
+				w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeXML)
 				_, _ = io.WriteString(w, `<?xml version="1.0"?><ListVersionsResult><IsTruncated>false</IsTruncated></ListVersionsResult>`)
 				return
 			}
-			w.Header().Set("Content-Type", "application/xml")
+			w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeXML)
 			w.WriteHeader(http.StatusNotFound)
 			_, _ = io.WriteString(w, `<?xml version="1.0"?><Error><Code>NoSuchBucket</Code><Message>The specified bucket does not exist</Message></Error>`)
 		})
@@ -197,7 +197,7 @@ func TestDeleteECSTaskDefinitionNotFound(t *testing.T) {
 	t.Cleanup(func() { newECSClient = old })
 	newECSClient = func(_ sdkaws.Config, _ ...func(*ecs.Options)) *ecs.Client {
 		return testECSClient(t, func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/x-amz-json-1.1")
+			w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
 			w.WriteHeader(http.StatusBadRequest)
 			_, _ = io.WriteString(w, `{"__type":"ClientException","message":"Unable to describe task definition. The task definition was not found."}`)
 		})
@@ -212,7 +212,7 @@ func TestDeleteECSTaskDefinitionDescribeError(t *testing.T) {
 	t.Cleanup(func() { newECSClient = old })
 	newECSClient = func(_ sdkaws.Config, _ ...func(*ecs.Options)) *ecs.Client {
 		return testECSClient(t, func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/x-amz-json-1.1")
+			w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
 			w.WriteHeader(http.StatusForbidden)
 			_, _ = io.WriteString(w, `{"__type":"AccessDeniedException","message":"Access denied"}`)
 		})
@@ -228,7 +228,7 @@ func TestDeleteECSTaskDefinitionActiveDeregisterThenDelete(t *testing.T) {
 	calls := map[string]int{}
 	newECSClient = func(_ sdkaws.Config, _ ...func(*ecs.Options)) *ecs.Client {
 		return testECSClient(t, func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/x-amz-json-1.1")
+			w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
 			target := r.Header.Get("X-Amz-Target")
 			switch {
 			case target == "AmazonEC2ContainerServiceV20141113.DescribeTaskDefinition":
@@ -259,7 +259,7 @@ func TestDeleteECSTaskDefinitionInactiveSkipsDeregister(t *testing.T) {
 	deregisterCalls := 0
 	newECSClient = func(_ sdkaws.Config, _ ...func(*ecs.Options)) *ecs.Client {
 		return testECSClient(t, func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/x-amz-json-1.1")
+			w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
 			target := r.Header.Get("X-Amz-Target")
 			switch {
 			case target == "AmazonEC2ContainerServiceV20141113.DescribeTaskDefinition":
@@ -287,7 +287,7 @@ func TestDeleteECSTaskDefinitionDeleteFailures(t *testing.T) {
 	t.Cleanup(func() { newECSClient = old })
 	newECSClient = func(_ sdkaws.Config, _ ...func(*ecs.Options)) *ecs.Client {
 		return testECSClient(t, func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/x-amz-json-1.1")
+			w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
 			target := r.Header.Get("X-Amz-Target")
 			switch {
 			case target == "AmazonEC2ContainerServiceV20141113.DescribeTaskDefinition":
@@ -311,7 +311,7 @@ func TestResourceExistsECSTaskDefinitionFound(t *testing.T) {
 	t.Cleanup(func() { newECSClient = old })
 	newECSClient = func(_ sdkaws.Config, _ ...func(*ecs.Options)) *ecs.Client {
 		return testECSClient(t, func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/x-amz-json-1.1")
+			w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
 			_, _ = io.WriteString(w, `{"taskDefinition":{"taskDefinitionArn":"arn:...","status":"ACTIVE"}}`)
 		})
 	}
@@ -329,7 +329,7 @@ func TestResourceExistsECSTaskDefinitionNotFound(t *testing.T) {
 	t.Cleanup(func() { newECSClient = old })
 	newECSClient = func(_ sdkaws.Config, _ ...func(*ecs.Options)) *ecs.Client {
 		return testECSClient(t, func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/x-amz-json-1.1")
+			w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
 			w.WriteHeader(http.StatusBadRequest)
 			_, _ = io.WriteString(w, `{"__type":"ClientException","message":"task definition not found"}`)
 		})
@@ -348,7 +348,7 @@ func TestResourceExistsECSTaskDefinitionError(t *testing.T) {
 	t.Cleanup(func() { newECSClient = old })
 	newECSClient = func(_ sdkaws.Config, _ ...func(*ecs.Options)) *ecs.Client {
 		return testECSClient(t, func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/x-amz-json-1.1")
+			w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
 			w.WriteHeader(http.StatusForbidden)
 			_, _ = io.WriteString(w, `{"__type":"AccessDeniedException","message":"Access denied"}`)
 		})
@@ -367,7 +367,7 @@ func TestResourceExistsLightsailStaticIpFound(t *testing.T) {
 	t.Cleanup(func() { newLightsailClient = old })
 	newLightsailClient = func(_ sdkaws.Config, _ ...func(*lightsail.Options)) *lightsail.Client {
 		return testLightsailClient(t, func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/x-amz-json-1.1")
+			w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
 			_, _ = io.WriteString(w, `{"staticIp":{"name":"my-ip","ipAddress":"1.2.3.4","isAttached":false}}`)
 		})
 	}
@@ -385,7 +385,7 @@ func TestResourceExistsLightsailStaticIpNotFound(t *testing.T) {
 	t.Cleanup(func() { newLightsailClient = old })
 	newLightsailClient = func(_ sdkaws.Config, _ ...func(*lightsail.Options)) *lightsail.Client {
 		return testLightsailClient(t, func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/x-amz-json-1.1")
+			w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
 			w.WriteHeader(http.StatusBadRequest)
 			_, _ = io.WriteString(w, `{"__type":"NotFoundException","message":"Static IP my-ip does not exist."}`)
 		})
@@ -404,7 +404,7 @@ func TestResourceExistsLightsailKeyPairFound(t *testing.T) {
 	t.Cleanup(func() { newLightsailClient = old })
 	newLightsailClient = func(_ sdkaws.Config, _ ...func(*lightsail.Options)) *lightsail.Client {
 		return testLightsailClient(t, func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/x-amz-json-1.1")
+			w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
 			_, _ = io.WriteString(w, `{"keyPair":{"name":"my-key"}}`)
 		})
 	}

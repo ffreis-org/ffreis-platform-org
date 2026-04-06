@@ -38,7 +38,7 @@ func overrideOrganizationsClient(t *testing.T, handler http.HandlerFunc) {
 
 func TestFindOrganizationalUnitIDByNameListRootsError(t *testing.T) {
 	client := testOrganizationsClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/x-amz-json-1.1")
+		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = io.WriteString(w, `{"__type":"ServiceException","message":"internal error"}`)
 	})
@@ -51,7 +51,7 @@ func TestFindOrganizationalUnitIDByNameListRootsError(t *testing.T) {
 func TestFindOrganizationalUnitIDByNameFound(t *testing.T) {
 	call := 0
 	client := testOrganizationsClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/x-amz-json-1.1")
+		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
 		call++
 		target := r.Header.Get("X-Amz-Target")
 		switch {
@@ -74,7 +74,7 @@ func TestFindOrganizationalUnitIDByNameFound(t *testing.T) {
 
 func TestFindOrganizationalUnitIDByNameNotFound(t *testing.T) {
 	client := testOrganizationsClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/x-amz-json-1.1")
+		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
 		target := r.Header.Get("X-Amz-Target")
 		switch {
 		case target == "AWSOrganizationsV20161128.ListRoots":
@@ -97,7 +97,7 @@ func TestFindOrganizationalUnitIDByNameNotFound(t *testing.T) {
 func TestFindOrganizationalUnitIDByNamePaginated(t *testing.T) {
 	listCalls := 0
 	client := testOrganizationsClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/x-amz-json-1.1")
+		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
 		target := r.Header.Get("X-Amz-Target")
 		switch {
 		case target == "AWSOrganizationsV20161128.ListRoots":
@@ -129,7 +129,7 @@ func TestFindOrganizationalUnitIDByNamePaginated(t *testing.T) {
 
 func TestFindOrganizationAccountIDByNameFound(t *testing.T) {
 	client := testOrganizationsClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/x-amz-json-1.1")
+		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
 		_, _ = io.WriteString(w, `{"Accounts":[{"Id":"111122223333","Name":"test-account","Status":"ACTIVE"}]}`)
 	})
 	id, err := findOrganizationAccountIDByName(context.Background(), client, "test-account")
@@ -143,7 +143,7 @@ func TestFindOrganizationAccountIDByNameFound(t *testing.T) {
 
 func TestFindOrganizationAccountIDByNameNotFound(t *testing.T) {
 	client := testOrganizationsClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/x-amz-json-1.1")
+		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
 		_, _ = io.WriteString(w, `{"Accounts":[{"Id":"111122223333","Name":"other-account","Status":"ACTIVE"}]}`)
 	})
 	id, err := findOrganizationAccountIDByName(context.Background(), client, "test-account")
@@ -157,7 +157,7 @@ func TestFindOrganizationAccountIDByNameNotFound(t *testing.T) {
 
 func TestFindOrganizationAccountIDByNameError(t *testing.T) {
 	client := testOrganizationsClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/x-amz-json-1.1")
+		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = io.WriteString(w, `{"__type":"ServiceException","message":"internal error"}`)
 	})
@@ -172,7 +172,7 @@ func TestFindOrganizationAccountIDByNameError(t *testing.T) {
 func TestFindOrganizationTargetIDByNameEnvironmentsOU(t *testing.T) {
 	// "environments" goes through findOrganizationalUnitIDByName path
 	client := testOrganizationsClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/x-amz-json-1.1")
+		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
 		target := r.Header.Get("X-Amz-Target")
 		switch {
 		case target == "AWSOrganizationsV20161128.ListRoots":
@@ -195,7 +195,7 @@ func TestFindOrganizationTargetIDByNameEnvironmentsOU(t *testing.T) {
 func TestFindOrganizationTargetIDByNameAccountName(t *testing.T) {
 	// Non-"environments" name goes through findOrganizationAccountIDByName
 	client := testOrganizationsClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/x-amz-json-1.1")
+		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
 		_, _ = io.WriteString(w, `{"Accounts":[{"Id":"111122223333","Name":"my-account","Status":"ACTIVE"}]}`)
 	})
 	id, err := findOrganizationTargetIDByName(context.Background(), client, "my-account")
@@ -217,7 +217,7 @@ func TestDetachOrganizationPolicyBySyntheticNameInvalidFormat(t *testing.T) {
 
 func TestDetachOrganizationPolicyBySyntheticNamePolicyNotFound(t *testing.T) {
 	overrideOrganizationsClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/x-amz-json-1.1")
+		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
 		// ListPolicies → empty
 		_, _ = io.WriteString(w, `{"Policies":[]}`)
 	})
@@ -228,7 +228,7 @@ func TestDetachOrganizationPolicyBySyntheticNamePolicyNotFound(t *testing.T) {
 
 func TestDetachOrganizationPolicyBySyntheticNameTargetNotFound(t *testing.T) {
 	overrideOrganizationsClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/x-amz-json-1.1")
+		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
 		target := r.Header.Get("X-Amz-Target")
 		switch {
 		case target == "AWSOrganizationsV20161128.ListPolicies":
@@ -247,7 +247,7 @@ func TestDetachOrganizationPolicyBySyntheticNameTargetNotFound(t *testing.T) {
 
 func TestDetachOrganizationPolicyBySyntheticNameSuccess(t *testing.T) {
 	overrideOrganizationsClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/x-amz-json-1.1")
+		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
 		target := r.Header.Get("X-Amz-Target")
 		switch {
 		case target == "AWSOrganizationsV20161128.ListPolicies":
@@ -269,7 +269,7 @@ func TestDetachOrganizationPolicyBySyntheticNameSuccess(t *testing.T) {
 
 func TestDeleteOrganizationPolicyByNameNotFound(t *testing.T) {
 	overrideOrganizationsClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/x-amz-json-1.1")
+		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
 		_, _ = io.WriteString(w, `{"Policies":[]}`)
 	})
 	if err := deleteOrganizationPolicyByName(context.Background(), "missing"); err != nil {
@@ -279,7 +279,7 @@ func TestDeleteOrganizationPolicyByNameNotFound(t *testing.T) {
 
 func TestDeleteOrganizationPolicyByNameSuccess(t *testing.T) {
 	overrideOrganizationsClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/x-amz-json-1.1")
+		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
 		target := r.Header.Get("X-Amz-Target")
 		switch {
 		case target == "AWSOrganizationsV20161128.ListPolicies":
@@ -299,7 +299,7 @@ func TestDeleteOrganizationPolicyByNameSuccess(t *testing.T) {
 
 func TestDeleteOrganizationOUByNameNotFound(t *testing.T) {
 	overrideOrganizationsClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/x-amz-json-1.1")
+		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
 		target := r.Header.Get("X-Amz-Target")
 		switch {
 		case target == "AWSOrganizationsV20161128.ListRoots":
@@ -317,7 +317,7 @@ func TestDeleteOrganizationOUByNameNotFound(t *testing.T) {
 
 func TestDeleteOrganizationOUByNameSuccess(t *testing.T) {
 	overrideOrganizationsClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/x-amz-json-1.1")
+		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
 		target := r.Header.Get("X-Amz-Target")
 		switch {
 		case target == "AWSOrganizationsV20161128.ListRoots":
@@ -339,7 +339,7 @@ func TestDeleteOrganizationOUByNameSuccess(t *testing.T) {
 
 func TestCloseOrganizationAccountByNameNotFound(t *testing.T) {
 	overrideOrganizationsClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/x-amz-json-1.1")
+		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
 		_, _ = io.WriteString(w, `{"Accounts":[]}`)
 	})
 	if err := closeOrganizationAccountByName(context.Background(), "missing"); err != nil {
@@ -349,7 +349,7 @@ func TestCloseOrganizationAccountByNameNotFound(t *testing.T) {
 
 func TestCloseOrganizationAccountByNameSuccess(t *testing.T) {
 	overrideOrganizationsClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/x-amz-json-1.1")
+		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
 		target := r.Header.Get("X-Amz-Target")
 		switch {
 		case target == "AWSOrganizationsV20161128.ListAccounts":

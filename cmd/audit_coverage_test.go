@@ -6,6 +6,12 @@ import (
 	"testing"
 )
 
+const (
+	testAuditType  = "a-type"
+	testAuditName  = "a-name"
+	testAuditStack = "a-stack"
+)
+
 // --- naming helpers ---
 
 func TestActivateLambdaName(t *testing.T) {
@@ -95,14 +101,14 @@ func TestAuditStatusCellPlainMode(t *testing.T) {
 
 func TestSortOtherManagedResources(t *testing.T) {
 	resources := []auditResource{
-		{stack: "z-stack", resourceType: "a-type", name: "b-name"},
-		{stack: "a-stack", resourceType: "z-type", name: "a-name"},
-		{stack: "a-stack", resourceType: "a-type", name: "z-name"},
-		{stack: "a-stack", resourceType: "a-type", name: "a-name"},
+		{stack: "z-stack", resourceType: testAuditType, name: "b-name"},
+		{stack: testAuditStack, resourceType: "z-type", name: testAuditName},
+		{stack: testAuditStack, resourceType: testAuditType, name: "z-name"},
+		{stack: testAuditStack, resourceType: testAuditType, name: testAuditName},
 	}
 	sortOtherManagedResources(resources)
 	// First by stack ascending, then type ascending, then name ascending.
-	if resources[0].stack != "a-stack" || resources[0].resourceType != "a-type" || resources[0].name != "a-name" {
+	if resources[0].stack != testAuditStack || resources[0].resourceType != testAuditType || resources[0].name != testAuditName {
 		t.Errorf("unexpected first element: %+v", resources[0])
 	}
 	if resources[len(resources)-1].stack != "z-stack" {
@@ -125,12 +131,12 @@ func TestSortOtherManagedResources(t *testing.T) {
 
 func TestSortUnownedResources(t *testing.T) {
 	resources := []auditResource{
-		{resourceType: "z-type", name: "a-name"},
-		{resourceType: "a-type", name: "z-name"},
-		{resourceType: "a-type", name: "a-name"},
+		{resourceType: "z-type", name: testAuditName},
+		{resourceType: testAuditType, name: "z-name"},
+		{resourceType: testAuditType, name: testAuditName},
 	}
 	sortUnownedResources(resources)
-	if resources[0].resourceType != "a-type" || resources[0].name != "a-name" {
+	if resources[0].resourceType != testAuditType || resources[0].name != testAuditName {
 		t.Errorf("unexpected first element: %+v", resources[0])
 	}
 	if resources[len(resources)-1].resourceType != "z-type" {
