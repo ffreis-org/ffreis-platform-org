@@ -1,5 +1,4 @@
 package main
-package main
 
 import (
 	"bytes"
@@ -11,6 +10,7 @@ import (
 	"testing"
 
 	sdkaws "github.com/aws/aws-sdk-go-v2/aws"
+	sdkconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 
 	"github.com/ffreis/platform-org/internal/activation"
@@ -52,7 +52,7 @@ func captureLogs(t *testing.T) *bytes.Buffer {
 
 func TestHandlerReturnsConfigError(t *testing.T) {
 	resetLambdaActivateHooks(t)
-	loadDefaultConfigFn = func(context.Context, ...func(*sdkaws.Config)) (sdkaws.Config, error) {
+	loadDefaultConfigFn = func(context.Context, ...func(*sdkconfig.LoadOptions) error) (sdkaws.Config, error) {
 		return sdkaws.Config{}, errors.New("boom")
 	}
 
@@ -66,7 +66,7 @@ func TestHandlerReturnsNotReadyAndPublishesRetryMessage(t *testing.T) {
 	resetLambdaActivateHooks(t)
 	logs := captureLogs(t)
 	t.Setenv("PLATFORM_EVENTS_TOPIC_ARN", "arn:aws:sns:us-east-1:123456789012:platform-events")
-	loadDefaultConfigFn = func(context.Context, ...func(*sdkaws.Config)) (sdkaws.Config, error) {
+	loadDefaultConfigFn = func(context.Context, ...func(*sdkconfig.LoadOptions) error) (sdkaws.Config, error) {
 		return stubLambdaConfig(), nil
 	}
 	activateCostTagsFn = func(context.Context, sdkaws.Config) error {
@@ -98,7 +98,7 @@ func TestHandlerReturnsFailureAndPublishesFailureMessage(t *testing.T) {
 	resetLambdaActivateHooks(t)
 	logs := captureLogs(t)
 	t.Setenv("PLATFORM_EVENTS_TOPIC_ARN", "arn:aws:sns:us-east-1:123456789012:platform-events")
-	loadDefaultConfigFn = func(context.Context, ...func(*sdkaws.Config)) (sdkaws.Config, error) {
+	loadDefaultConfigFn = func(context.Context, ...func(*sdkconfig.LoadOptions) error) (sdkaws.Config, error) {
 		return stubLambdaConfig(), nil
 	}
 	activateCostTagsFn = func(context.Context, sdkaws.Config) error {
@@ -129,7 +129,7 @@ func TestHandlerSucceedsWithoutTopic(t *testing.T) {
 	resetLambdaActivateHooks(t)
 	logs := captureLogs(t)
 	t.Setenv("PLATFORM_EVENTS_TOPIC_ARN", "")
-	loadDefaultConfigFn = func(context.Context, ...func(*sdkaws.Config)) (sdkaws.Config, error) {
+	loadDefaultConfigFn = func(context.Context, ...func(*sdkconfig.LoadOptions) error) (sdkaws.Config, error) {
 		return stubLambdaConfig(), nil
 	}
 	activateCostTagsFn = func(context.Context, sdkaws.Config) error { return nil }
@@ -150,7 +150,7 @@ func TestHandlerIgnoresPublishErrorOnSuccess(t *testing.T) {
 	resetLambdaActivateHooks(t)
 	logs := captureLogs(t)
 	t.Setenv("PLATFORM_EVENTS_TOPIC_ARN", "arn:aws:sns:us-east-1:123456789012:platform-events")
-	loadDefaultConfigFn = func(context.Context, ...func(*sdkaws.Config)) (sdkaws.Config, error) {
+	loadDefaultConfigFn = func(context.Context, ...func(*sdkconfig.LoadOptions) error) (sdkaws.Config, error) {
 		return stubLambdaConfig(), nil
 	}
 	activateCostTagsFn = func(context.Context, sdkaws.Config) error { return nil }
