@@ -159,8 +159,8 @@ func executeCommand(cmd *cobra.Command, stderr io.Writer) int {
 }
 
 // loadAWSConfig builds an aws.Config. When profile is set, it uses a named
-// profile. When AWS_ACCESS_KEY_ID is set, it picks up ambient env vars.
-// Any other case is an error — no silent IMDS fallback.
+// profile. When both AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are set, it
+// picks up ambient env vars. Any other case is an error — no silent IMDS fallback.
 func loadAWSConfig(ctx context.Context, profile, region string) (sdkaws.Config, error) {
 	opts := []func(*sdkcfg.LoadOptions) error{
 		sdkcfg.WithRegion(region),
@@ -168,7 +168,7 @@ func loadAWSConfig(ctx context.Context, profile, region string) (sdkaws.Config, 
 	switch {
 	case profile != "":
 		opts = append(opts, sdkcfg.WithSharedConfigProfile(profile))
-	case os.Getenv("AWS_ACCESS_KEY_ID") != "":
+	case os.Getenv("AWS_ACCESS_KEY_ID") != "" && os.Getenv("AWS_SECRET_ACCESS_KEY") != "":
 		// SDK picks up env vars automatically — no extra option needed.
 	default:
 		return sdkaws.Config{}, errors.New(

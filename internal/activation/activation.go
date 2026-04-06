@@ -2,12 +2,14 @@ package activation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	sdkaws "github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/costexplorer"
 	cetypes "github.com/aws/aws-sdk-go-v2/service/costexplorer/types"
+	"github.com/aws/smithy-go"
 )
 
 // CostAllocationTags is the canonical list of tags to activate in AWS Cost Explorer.
@@ -55,7 +57,8 @@ func Activate(ctx context.Context, client CostAllocationTagsUpdater) error {
 			CostAllocationTagsStatus: entries,
 		})
 	if err != nil {
-		if strings.Contains(err.Error(), "Tag keys not found") {
+		var apiErr smithy.APIError
+		if errors.As(err, &apiErr) && strings.Contains(strings.ToLower(apiErr.ErrorCode()), "notfound") {
 			return &ErrNotReady{Missing: CostAllocationTags}
 		}
 		return fmt.Errorf("UpdateCostAllocationTagsStatus: %w", err)
@@ -66,6 +69,9 @@ func Activate(ctx context.Context, client CostAllocationTagsUpdater) error {
 	var notReady, failed []string
 	for _, e := range out.Errors {
 		key := sdkaws.ToString(e.TagKey)
+		if key == "" {
+			continue
+		}
 		if strings.Contains(strings.ToLower(sdkaws.ToString(e.Code)), "notfound") ||
 			strings.Contains(strings.ToLower(sdkaws.ToString(e.Message)), "not found") {
 			notReady = append(notReady, key)

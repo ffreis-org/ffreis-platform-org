@@ -134,12 +134,12 @@ func activationCostTagResource(key string, status cetypes.CostAllocationTagStatu
 func applyActivationScheduleStatus(resource *expectedAuditResource, schedule *activationScheduleDetails, scheduleHealthy bool) {
 	if scheduleHealthy {
 		resource.status = "SCHEDULED"
-		resource.issues = []string{fmt.Sprintf("pending auto-activation schedule: %s", scheduleSummary(*schedule))}
+		resource.issues = append(resource.issues, fmt.Sprintf("pending auto-activation schedule: %s", scheduleSummary(*schedule)))
 		return
 	}
 	if schedule != nil {
 		resource.status = "WARN"
-		resource.issues = []string{fmt.Sprintf("auto-activation schedule needs attention: %s", scheduleSummary(*schedule))}
+		resource.issues = append(resource.issues, fmt.Sprintf("auto-activation schedule needs attention: %s", scheduleSummary(*schedule)))
 	}
 }
 

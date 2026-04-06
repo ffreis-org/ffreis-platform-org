@@ -8,6 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/costexplorer"
 	cetypes "github.com/aws/aws-sdk-go-v2/service/costexplorer/types"
+	"github.com/aws/smithy-go"
 
 	"github.com/ffreis/platform-org/internal/activation"
 )
@@ -38,7 +39,7 @@ func TestActivate_HappyPath(t *testing.T) {
 
 func TestActivate_APIErrorNotFound(t *testing.T) {
 	mock := &mockCE{
-		err: errors.New("Tag keys not found: Stack, Project"),
+		err: &smithy.GenericAPIError{Code: "TagKeyNotFoundException", Message: "Tag keys not found: Stack, Project"},
 	}
 	err := activation.Activate(context.Background(), mock)
 	if err == nil {
@@ -55,7 +56,7 @@ func TestActivate_APIErrorNotFound(t *testing.T) {
 
 func TestActivate_APIErrorGeneric(t *testing.T) {
 	mock := &mockCE{
-		err: errors.New("InternalServiceError: something went wrong"),
+		err: &smithy.GenericAPIError{Code: "InternalServiceError", Message: "something went wrong"},
 	}
 	err := activation.Activate(context.Background(), mock)
 	if err == nil {
