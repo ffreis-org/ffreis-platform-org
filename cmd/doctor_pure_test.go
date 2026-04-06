@@ -679,16 +679,59 @@ func TestDoctorSummarizePlatformOrgDoctor(t *testing.T) {
 // buildStateLiveIndex
 // ---------------------------------------------------------------------------
 
+type doctorBuildStateLiveIndexCase struct {
+	name            string
+	resources       []auditResource
+	wantARNKey      string
+	wantNameKey     string
+	wantARNLen      int
+	wantNameLen     int
+	wantNameEntries int
+}
+
+func assertDoctorBuildStateLiveIndexCase(t *testing.T, tc doctorBuildStateLiveIndexCase) {
+	t.Helper()
+
+	byARN, byName := buildStateLiveIndex(tc.resources)
+	assertDoctorBuildStateLiveIndexARN(t, byARN, tc)
+	assertDoctorBuildStateLiveIndexName(t, byName, tc)
+}
+
+func assertDoctorBuildStateLiveIndexARN(t *testing.T, byARN map[string]auditResource, tc doctorBuildStateLiveIndexCase) {
+	t.Helper()
+
+	if tc.wantARNKey == "" {
+		if len(byARN) != tc.wantARNLen {
+			t.Errorf("expected arn index len %d, got %d", tc.wantARNLen, len(byARN))
+		}
+		return
+	}
+	if _, ok := byARN[tc.wantARNKey]; !ok {
+		t.Errorf("expected arn index entry")
+	}
+}
+
+func assertDoctorBuildStateLiveIndexName(t *testing.T, byName map[string][]auditResource, tc doctorBuildStateLiveIndexCase) {
+	t.Helper()
+
+	if tc.wantNameKey == "" {
+		if len(byName) != tc.wantNameLen {
+			t.Errorf("expected name index len %d, got %d", tc.wantNameLen, len(byName))
+		}
+		return
+	}
+	entries, ok := byName[tc.wantNameKey]
+	if !ok {
+		t.Errorf("expected name index entry")
+		return
+	}
+	if tc.wantNameEntries > 0 && len(entries) != tc.wantNameEntries {
+		t.Errorf("expected %d entries for same name, got %d", tc.wantNameEntries, len(entries))
+	}
+}
+
 func TestDoctorBuildStateLiveIndex(t *testing.T) {
-	tests := []struct {
-		name            string
-		resources       []auditResource
-		wantARNKey      string
-		wantNameKey     string
-		wantARNLen      int
-		wantNameLen     int
-		wantNameEntries int
-	}{
+	tests := []doctorBuildStateLiveIndexCase{
 		{name: "empty"},
 		{name: "arn only", resources: []auditResource{{arn: testDoctorExistingBucketARN}}, wantARNKey: testDoctorExistingBucketARN, wantNameLen: 0},
 		{name: "name only", resources: []auditResource{{name: "My-Bucket"}}, wantARNLen: 0, wantNameKey: strings.ToLower(testDoctorBucketName)},
@@ -698,29 +741,7 @@ func TestDoctorBuildStateLiveIndex(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			byARN, byName := buildStateLiveIndex(tc.resources)
-			if tc.wantARNKey == "" {
-				if len(byARN) != tc.wantARNLen {
-					t.Errorf("expected arn index len %d, got %d", tc.wantARNLen, len(byARN))
-				}
-			} else if _, ok := byARN[tc.wantARNKey]; !ok {
-				t.Errorf("expected arn index entry")
-			}
-
-			if tc.wantNameKey == "" {
-				if len(byName) != tc.wantNameLen {
-					t.Errorf("expected name index len %d, got %d", tc.wantNameLen, len(byName))
-				}
-				return
-			}
-			entries, ok := byName[tc.wantNameKey]
-			if !ok {
-				t.Errorf("expected name index entry")
-				return
-			}
-			if tc.wantNameEntries > 0 && len(entries) != tc.wantNameEntries {
-				t.Errorf("expected 2 entries for same name, got %d", len(entries))
-			}
+			assertDoctorBuildStateLiveIndexCase(t, tc)
 		})
 	}
 }
