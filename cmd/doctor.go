@@ -896,12 +896,7 @@ func platformOrgInventoryDoctorSection(ctx context.Context) (platformOrgDoctorSe
 		})
 	}
 
-	bootstrapCount := 0
-	for _, resource := range sections.otherManaged {
-		if resource.stack == "bootstrap" {
-			bootstrapCount++
-		}
-	}
+	bootstrapCount := countByStack(sections.otherManaged, "bootstrap")
 	status := "info"
 	detail := "no bootstrap-managed external dependencies were discovered"
 	if bootstrapCount > 0 {
@@ -918,6 +913,16 @@ func platformOrgInventoryDoctorSection(ctx context.Context) (platformOrgDoctorSe
 	})
 
 	return platformOrgDoctorSection{Title: "Inventory and Ownership", Checks: checks}, nil
+}
+
+func countByStack(resources []auditResource, stack string) int {
+	count := 0
+	for _, r := range resources {
+		if r.stack == stack {
+			count++
+		}
+	}
+	return count
 }
 
 func existsStatus(exists bool, err error) string {

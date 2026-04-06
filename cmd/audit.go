@@ -122,6 +122,7 @@ type auditResource struct {
 const (
 	platformOrgStackTag           = "platform-org"
 	resourceTypeSchedulerSchedule = "scheduler/schedule"
+	activateCostTagsSuffix        = "-activate-cost-tags"
 )
 
 var auditCmd = &cobra.Command{
@@ -187,11 +188,25 @@ Sections:
 
 var printBudgetSectionFn = printBudgetSection
 
+func appendTaggedResource(ctx context.Context, mapping taggingtypes.ResourceTagMapping, results []auditResource) []auditResource {
+	resource := classifyResource(mapping)
+	exists, err := resourceExistsFn(ctx, resource)
+	if err != nil {
+		if d.log != nil {
+			d.log.Warn("resource existence check failed", "resource_type", resource.resourceType, "name", resource.name, "error", err)
+		}
+		return append(results, resource)
+	}
+	if !exists {
+		return results
+	}
+	return append(results, resource)
+}
+
 // scanResources fetches all tagged resources from the Tagging API and
 // categorises each one as owned, unowned, or owned-with-issues.
 func scanResources(ctx context.Context) ([]auditResource, error) {
 	var results []auditResource
-
 	var nextToken *string
 	for {
 		out, err := getResourcesPage(ctx, &resourcegroupstaggingapi.GetResourcesInput{
@@ -201,29 +216,14 @@ func scanResources(ctx context.Context) ([]auditResource, error) {
 		if err != nil {
 			return nil, fmt.Errorf("GetResources: %w", err)
 		}
-
 		for _, mapping := range out.ResourceTagMappingList {
-			resource := classifyResource(mapping)
-			exists, err := resourceExistsFn(ctx, resource)
-			if err != nil {
-				if d.log != nil {
-					d.log.Warn("resource existence check failed", "resource_type", resource.resourceType, "name", resource.name, "error", err)
-				}
-				results = append(results, resource)
-				continue
-			}
-			if !exists {
-				continue
-			}
-			results = append(results, resource)
+			results = appendTaggedResource(ctx, mapping, results)
 		}
-
 		if sdkaws.ToString(out.PaginationToken) == "" {
 			break
 		}
 		nextToken = out.PaginationToken
 	}
-
 	return results, nil
 }
 
@@ -913,7 +913,7 @@ func listPlatformOrgSchedules(ctx context.Context, org string) ([]activationSche
 }
 
 func activationScheduleName(org string) string {
-	return org + "-activate-cost-tags"
+	return org + activateCostTagsSuffix
 }
 
 func activationScheduleGroupName(org string) string {
@@ -921,11 +921,11 @@ func activationScheduleGroupName(org string) string {
 }
 
 func activateLambdaName(org string) string {
-	return org + "-activate-cost-tags"
+	return org + activateCostTagsSuffix
 }
 
 func activateLambdaLogGroupName(org string) string {
-	return "/aws/lambda/" + org + "-activate-cost-tags"
+	return "/aws/lambda/" + org + activateCostTagsSuffix
 }
 
 func schedulerInvokeRoleName(org string) string {
