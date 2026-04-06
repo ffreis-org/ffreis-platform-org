@@ -12,7 +12,9 @@ import (
 	"github.com/ffreis/platform-org/internal/activation"
 )
 
-// mockCE implements activation.CostExplorerAPI for testing.
+const errExpectedNonNil = "expected error, got nil"
+
+// mockCE implements activation.CostAllocationTagsUpdater for testing.
 type mockCE struct {
 	out *costexplorer.UpdateCostAllocationTagsStatusOutput
 	err error
@@ -40,7 +42,7 @@ func TestActivate_APIErrorNotFound(t *testing.T) {
 	}
 	err := activation.Activate(context.Background(), mock)
 	if err == nil {
-		t.Fatal("expected error, got nil")
+		t.Fatal(errExpectedNonNil)
 	}
 	var notReady *activation.ErrNotReady
 	if !errors.As(err, &notReady) {
@@ -57,7 +59,7 @@ func TestActivate_APIErrorGeneric(t *testing.T) {
 	}
 	err := activation.Activate(context.Background(), mock)
 	if err == nil {
-		t.Fatal("expected error, got nil")
+		t.Fatal(errExpectedNonNil)
 	}
 	var notReady *activation.ErrNotReady
 	if errors.As(err, &notReady) {
@@ -79,7 +81,7 @@ func TestActivate_PartialNotFoundInResponse(t *testing.T) {
 	}
 	err := activation.Activate(context.Background(), mock)
 	if err == nil {
-		t.Fatal("expected error, got nil")
+		t.Fatal(errExpectedNonNil)
 	}
 	var notReady *activation.ErrNotReady
 	if !errors.As(err, &notReady) {
@@ -104,7 +106,7 @@ func TestActivate_PartialOtherFailureInResponse(t *testing.T) {
 	}
 	err := activation.Activate(context.Background(), mock)
 	if err == nil {
-		t.Fatal("expected error, got nil")
+		t.Fatal(errExpectedNonNil)
 	}
 	var notReady *activation.ErrNotReady
 	if errors.As(err, &notReady) {

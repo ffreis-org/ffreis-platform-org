@@ -151,6 +151,16 @@ var nativeDeleteHandlers = map[string]nativeResourceDeleteFn{
 	},
 }
 
+func existsByAPICall(err error) (bool, error) {
+	if err == nil {
+		return true, nil
+	}
+	if isNotFoundError(err) {
+		return false, nil
+	}
+	return false, err
+}
+
 func resourceExists(ctx context.Context, resource auditResource) (bool, error) {
 	switch resource.resourceType {
 	case "ecs/task-definition":
@@ -158,37 +168,19 @@ func resourceExists(ctx context.Context, resource auditResource) (bool, error) {
 		_, err := client.DescribeTaskDefinition(ctx, &ecs.DescribeTaskDefinitionInput{
 			TaskDefinition: sdkaws.String(resource.arn),
 		})
-		if err != nil {
-			if isNotFoundError(err) {
-				return false, nil
-			}
-			return false, err
-		}
-		return true, nil
+		return existsByAPICall(err)
 	case "lightsail/StaticIp":
 		client := newLightsailClient(d.awsCfg)
 		_, err := client.GetStaticIp(ctx, &lightsail.GetStaticIpInput{
 			StaticIpName: sdkaws.String(resource.name),
 		})
-		if err != nil {
-			if isNotFoundError(err) {
-				return false, nil
-			}
-			return false, err
-		}
-		return true, nil
+		return existsByAPICall(err)
 	case "lightsail/KeyPair":
 		client := newLightsailClient(d.awsCfg)
 		_, err := client.GetKeyPair(ctx, &lightsail.GetKeyPairInput{
 			KeyPairName: sdkaws.String(resource.name),
 		})
-		if err != nil {
-			if isNotFoundError(err) {
-				return false, nil
-			}
-			return false, err
-		}
-		return true, nil
+		return existsByAPICall(err)
 	default:
 		return true, nil
 	}
@@ -202,9 +194,7 @@ func deleteResourceNatively(ctx context.Context, resource auditResource, force b
 	return handler(ctx, resource, force)
 }
 
-func forceDeleteIAMRole(ctx context.Context, roleName string) error {
-	client := newIAMDeleteClient(d.awsCfg)
-
+func deleteAllInlineRolePolicies(ctx context.Context, client *iam.Client, roleName string) error {
 	var marker *string
 	for {
 		out, err := client.ListRolePolicies(ctx, &iam.ListRolePoliciesInput{
@@ -231,8 +221,11 @@ func forceDeleteIAMRole(ctx context.Context, roleName string) error {
 		}
 		marker = out.Marker
 	}
+	return nil
+}
 
-	marker = nil
+func detachAllManagedRolePolicies(ctx context.Context, client *iam.Client, roleName string) error {
+	var marker *string
 	for {
 		out, err := client.ListAttachedRolePolicies(ctx, &iam.ListAttachedRolePoliciesInput{
 			RoleName: sdkaws.String(roleName),
@@ -258,7 +251,17 @@ func forceDeleteIAMRole(ctx context.Context, roleName string) error {
 		}
 		marker = out.Marker
 	}
+	return nil
+}
 
+func forceDeleteIAMRole(ctx context.Context, roleName string) error {
+	client := newIAMDeleteClient(d.awsCfg)
+	if err := deleteAllInlineRolePolicies(ctx, client, roleName); err != nil {
+		return err
+	}
+	if err := detachAllManagedRolePolicies(ctx, client, roleName); err != nil {
+		return err
+	}
 	_, err := client.DeleteRole(ctx, &iam.DeleteRoleInput{
 		RoleName: sdkaws.String(roleName),
 	})

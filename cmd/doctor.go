@@ -249,6 +249,153 @@ func (r PlatformOrgDoctorReport) BlockingFailures() int {
 	return count
 }
 
+func checkBackendLocalFile(local map[string]string, localErr error, localPath string) platformOrgDoctorCheck {
+	if localErr != nil {
+		return platformOrgDoctorCheck{
+			Key:      "backend.local-file",
+			Title:    "backend.local.hcl is readable",
+			Status:   "fail",
+			Detail:   localErr.Error(),
+			Hint:     "run platform-bootstrap fetch to regenerate terraform/stack/backend.local.hcl",
+			Related:  []string{localPath},
+			Blocking: true,
+		}
+	}
+	missing := missingBackendMapKeys(local, "bucket", "dynamodb_table", "region")
+	status, detail, blocking := "ok", "backend.local.hcl contains bucket, dynamodb_table, and region", false
+	if len(missing) > 0 {
+		status, detail, blocking = "fail", "backend.local.hcl is missing keys: "+strings.Join(missing, ", "), true
+	}
+	return platformOrgDoctorCheck{
+		Key:      "backend.local-file",
+		Title:    "backend.local.hcl is complete",
+		Status:   status,
+		Detail:   detail,
+		Hint:     "regenerate backend.local.hcl from bootstrap if any key is missing",
+		Related:  []string{localPath},
+		Blocking: blocking,
+	}
+}
+
+func checkBackendEnvFile(envCfg map[string]string, envErr error, envPath, env string) platformOrgDoctorCheck {
+	if envErr != nil {
+		return platformOrgDoctorCheck{
+			Key:      "backend.env-file",
+			Title:    "env backend.hcl is readable",
+			Status:   "fail",
+			Detail:   envErr.Error(),
+			Hint:     "restore terraform/envs/" + env + "/backend.hcl",
+			Related:  []string{envPath},
+			Blocking: true,
+		}
+	}
+	missing := missingBackendMapKeys(envCfg, "key")
+	status, detail, blocking := "ok", "env backend.hcl contains the committed state key", false
+	if len(missing) > 0 {
+		status, detail, blocking = "fail", "env backend.hcl is missing keys: "+strings.Join(missing, ", "), true
+	}
+	return platformOrgDoctorCheck{
+		Key:      "backend.env-file",
+		Title:    "env backend.hcl is complete",
+		Status:   status,
+		Detail:   detail,
+		Hint:     "restore terraform/envs/" + env + "/backend.hcl with the committed key",
+		Related:  []string{envPath},
+		Blocking: blocking,
+	}
+}
+
+func checkBackendStateObject(stateVersionCount int, stateErr error, cfg nukeBackendStateConfig) platformOrgDoctorCheck {
+	switch {
+	case stateErr != nil:
+		return platformOrgDoctorCheck{
+			Key:      backendStateObjectKey,
+			Title:    backendStateObjectReadableTitle,
+			Status:   "fail",
+			Detail:   stateErr.Error(),
+			Hint:     "repair the root backend bucket or permissions so terraform state can be read directly",
+			Related:  []string{cfg.BucketName + "/" + cfg.StateKey},
+			Blocking: true,
+		}
+	case stateVersionCount == 0:
+		return platformOrgDoctorCheck{
+			Key:      backendStateObjectKey,
+			Title:    backendStateObjectReadableTitle,
+			Status:   "info",
+			Detail:   "no current state object exists for " + cfg.StateKey,
+			Hint:     "this is expected before the first apply or after a full nuke",
+			Related:  []string{cfg.BucketName + "/" + cfg.StateKey},
+			Blocking: false,
+		}
+	default:
+		return platformOrgDoctorCheck{
+			Key:      backendStateObjectKey,
+			Title:    backendStateObjectReadableTitle,
+			Status:   "ok",
+			Detail:   fmt.Sprintf("%d state object version(s) found for %s", stateVersionCount, cfg.StateKey),
+			Hint:     "inspect the root backend bucket if this stops matching the current state key",
+			Related:  []string{cfg.BucketName + "/" + cfg.StateKey},
+			Blocking: false,
+		}
+	}
+}
+
+func checkBackendLockRows(lockItemCount, stateVersionCount int, lockErr error, cfg nukeBackendStateConfig) platformOrgDoctorCheck {
+	if lockErr != nil {
+		return platformOrgDoctorCheck{
+			Key:      backendLockRowsKey,
+			Title:    backendLockRowsTitle,
+			Status:   "fail",
+			Detail:   lockErr.Error(),
+			Hint:     "repair the root lock table or permissions so terraform lock rows can be inspected",
+			Related:  []string{cfg.TableName},
+			Blocking: true,
+		}
+	}
+	switch {
+	case lockItemCount > 0 && stateVersionCount == 0:
+		return platformOrgDoctorCheck{
+			Key:      backendLockRowsKey,
+			Title:    backendLockRowsTitle,
+			Status:   "fail",
+			Detail:   fmt.Sprintf("%d lock row(s) exist for %s but no current state object exists", lockItemCount, cfg.StateKey),
+			Hint:     "clear orphaned terraform lock rows before trusting the root backend",
+			Related:  []string{cfg.TableName, cfg.StateKey},
+			Blocking: true,
+		}
+	case lockItemCount == 0 && stateVersionCount > 0:
+		return platformOrgDoctorCheck{
+			Key:      backendLockRowsKey,
+			Title:    backendLockRowsTitle,
+			Status:   "warn",
+			Detail:   "state object exists but no matching lock rows are present",
+			Hint:     "this is usually fine when terraform is idle, but verify the backend if concurrent operations were expected",
+			Related:  []string{cfg.TableName, cfg.StateKey},
+			Blocking: false,
+		}
+	case lockItemCount > 0:
+		return platformOrgDoctorCheck{
+			Key:      backendLockRowsKey,
+			Title:    backendLockRowsTitle,
+			Status:   "warn",
+			Detail:   fmt.Sprintf("%d matching lock row(s) exist for %s", lockItemCount, cfg.StateKey),
+			Hint:     "ensure no terraform apply/destroy is still in flight before proceeding",
+			Related:  []string{cfg.TableName, cfg.StateKey},
+			Blocking: false,
+		}
+	default:
+		return platformOrgDoctorCheck{
+			Key:      backendLockRowsKey,
+			Title:    backendLockRowsTitle,
+			Status:   "ok",
+			Detail:   "no orphaned lock rows found for the current state key",
+			Hint:     "lock rows should remain empty when terraform is idle",
+			Related:  []string{cfg.TableName, cfg.StateKey},
+			Blocking: false,
+		}
+	}
+}
+
 func platformOrgBackendDoctorSection(ctx context.Context) (platformOrgDoctorSection, error) {
 	root, err := repoRoot()
 	if err != nil {
@@ -259,72 +406,13 @@ func platformOrgBackendDoctorSection(ctx context.Context) (platformOrgDoctorSect
 		return platformOrgDoctorSection{}, err
 	}
 
-	checks := []platformOrgDoctorCheck{}
 	localPath := filepath.Join(stack, "backend.local.hcl")
 	envPath := filepath.Join(root, envsDirName, d.env, "backend.hcl")
 	local, localErr := parseBackendConfigFile(localPath)
 	envCfg, envErr := parseBackendConfigFile(envPath)
-
-	if localErr != nil {
-		checks = append(checks, platformOrgDoctorCheck{
-			Key:      "backend.local-file",
-			Title:    "backend.local.hcl is readable",
-			Status:   "fail",
-			Detail:   localErr.Error(),
-			Hint:     "run platform-bootstrap fetch to regenerate terraform/stack/backend.local.hcl",
-			Related:  []string{localPath},
-			Blocking: true,
-		})
-	} else {
-		missing := missingBackendMapKeys(local, "bucket", "dynamodb_table", "region")
-		status := "ok"
-		detail := "backend.local.hcl contains bucket, dynamodb_table, and region"
-		blocking := false
-		if len(missing) > 0 {
-			status = "fail"
-			detail = "backend.local.hcl is missing keys: " + strings.Join(missing, ", ")
-			blocking = true
-		}
-		checks = append(checks, platformOrgDoctorCheck{
-			Key:      "backend.local-file",
-			Title:    "backend.local.hcl is complete",
-			Status:   status,
-			Detail:   detail,
-			Hint:     "regenerate backend.local.hcl from bootstrap if any key is missing",
-			Related:  []string{localPath},
-			Blocking: blocking,
-		})
-	}
-
-	if envErr != nil {
-		checks = append(checks, platformOrgDoctorCheck{
-			Key:      "backend.env-file",
-			Title:    "env backend.hcl is readable",
-			Status:   "fail",
-			Detail:   envErr.Error(),
-			Hint:     "restore terraform/envs/" + d.env + "/backend.hcl",
-			Related:  []string{envPath},
-			Blocking: true,
-		})
-	} else {
-		missing := missingBackendMapKeys(envCfg, "key")
-		status := "ok"
-		detail := "env backend.hcl contains the committed state key"
-		blocking := false
-		if len(missing) > 0 {
-			status = "fail"
-			detail = "env backend.hcl is missing keys: " + strings.Join(missing, ", ")
-			blocking = true
-		}
-		checks = append(checks, platformOrgDoctorCheck{
-			Key:      "backend.env-file",
-			Title:    "env backend.hcl is complete",
-			Status:   status,
-			Detail:   detail,
-			Hint:     "restore terraform/envs/" + d.env + "/backend.hcl with the committed key",
-			Related:  []string{envPath},
-			Blocking: blocking,
-		})
+	checks := []platformOrgDoctorCheck{
+		checkBackendLocalFile(local, localErr, localPath),
+		checkBackendEnvFile(envCfg, envErr, envPath, d.env),
 	}
 
 	cfg, err := loadBackendStateConfigForNukeFn(root, d.env)
@@ -343,20 +431,20 @@ func platformOrgBackendDoctorSection(ctx context.Context) (platformOrgDoctorSect
 	expectedBucket := d.org + "-tf-state-root"
 	expectedTable := d.org + "-tf-locks-root"
 	expectedKey := fmt.Sprintf("platform-org/%s/terraform.tfstate", d.env)
-	status := "ok"
-	detail := fmt.Sprintf("bucket=%s  table=%s  key=%s", cfg.BucketName, cfg.TableName, cfg.StateKey)
+	identityStatus := "ok"
+	identityDetail := fmt.Sprintf("bucket=%s  table=%s  key=%s", cfg.BucketName, cfg.TableName, cfg.StateKey)
 	if cfg.BucketName != expectedBucket || cfg.TableName != expectedTable || cfg.StateKey != expectedKey {
-		status = "fail"
-		detail = fmt.Sprintf("resolved backend points to bucket=%s table=%s key=%s, expected bucket=%s table=%s key=%s", cfg.BucketName, cfg.TableName, cfg.StateKey, expectedBucket, expectedTable, expectedKey)
+		identityStatus = "fail"
+		identityDetail = fmt.Sprintf("resolved backend points to bucket=%s table=%s key=%s, expected bucket=%s table=%s key=%s", cfg.BucketName, cfg.TableName, cfg.StateKey, expectedBucket, expectedTable, expectedKey)
 	}
 	checks = append(checks, platformOrgDoctorCheck{
 		Key:      "backend.identity",
 		Title:    "backend points at the current org and env",
-		Status:   status,
-		Detail:   detail,
+		Status:   identityStatus,
+		Detail:   identityDetail,
 		Hint:     "regenerate backend files if they point at another org, env, or root backend",
 		Related:  []string{expectedBucket, expectedTable, expectedKey},
-		Blocking: status == "fail",
+		Blocking: identityStatus == "fail",
 	})
 
 	bucketExists, bucketErr := s3BucketExists(ctx, cfg.BucketName)
@@ -385,94 +473,101 @@ func platformOrgBackendDoctorSection(ctx context.Context) (platformOrgDoctorSect
 	dynamoClient := newNukeBackendResetDynamoClientFn(d.awsCfg)
 	stateVersions, _, stateErr := listStateObjectVersions(ctx, s3Client, cfg.BucketName, cfg.StateKey)
 	lockItems, lockErr := findMatchingLockItems(ctx, dynamoClient, cfg.TableName, cfg.BucketName, cfg.StateKey)
-	if stateErr != nil {
-		checks = append(checks, platformOrgDoctorCheck{
-			Key:      backendStateObjectKey,
-			Title:    "backend state object is readable",
-			Status:   "fail",
-			Detail:   stateErr.Error(),
-			Hint:     "repair the root backend bucket or permissions so terraform state can be read directly",
-			Related:  []string{cfg.BucketName + "/" + cfg.StateKey},
-			Blocking: true,
-		})
-	} else if len(stateVersions) == 0 {
-		checks = append(checks, platformOrgDoctorCheck{
-			Key:      backendStateObjectKey,
-			Title:    "backend state object is readable",
-			Status:   "info",
-			Detail:   "no current state object exists for " + cfg.StateKey,
-			Hint:     "this is expected before the first apply or after a full nuke",
-			Related:  []string{cfg.BucketName + "/" + cfg.StateKey},
-			Blocking: false,
-		})
-	} else {
-		checks = append(checks, platformOrgDoctorCheck{
-			Key:      backendStateObjectKey,
-			Title:    "backend state object is readable",
-			Status:   "ok",
-			Detail:   fmt.Sprintf("%d state object version(s) found for %s", len(stateVersions), cfg.StateKey),
-			Hint:     "inspect the root backend bucket if this stops matching the current state key",
-			Related:  []string{cfg.BucketName + "/" + cfg.StateKey},
-			Blocking: false,
-		})
-	}
-
-	if lockErr != nil {
-		checks = append(checks, platformOrgDoctorCheck{
-			Key:      "backend.lock-rows",
-			Title:    backendLockRowsTitle,
-			Status:   "fail",
-			Detail:   lockErr.Error(),
-			Hint:     "repair the root lock table or permissions so terraform lock rows can be inspected",
-			Related:  []string{cfg.TableName},
-			Blocking: true,
-		})
-	} else {
-		switch {
-		case len(lockItems) > 0 && len(stateVersions) == 0:
-			checks = append(checks, platformOrgDoctorCheck{
-				Key:      "backend.lock-rows",
-				Title:    backendLockRowsTitle,
-				Status:   "fail",
-				Detail:   fmt.Sprintf("%d lock row(s) exist for %s but no current state object exists", len(lockItems), cfg.StateKey),
-				Hint:     "clear orphaned terraform lock rows before trusting the root backend",
-				Related:  []string{cfg.TableName, cfg.StateKey},
-				Blocking: true,
-			})
-		case len(lockItems) == 0 && len(stateVersions) > 0:
-			checks = append(checks, platformOrgDoctorCheck{
-				Key:      "backend.lock-rows",
-				Title:    backendLockRowsTitle,
-				Status:   "warn",
-				Detail:   "state object exists but no matching lock rows are present",
-				Hint:     "this is usually fine when terraform is idle, but verify the backend if concurrent operations were expected",
-				Related:  []string{cfg.TableName, cfg.StateKey},
-				Blocking: false,
-			})
-		case len(lockItems) > 0:
-			checks = append(checks, platformOrgDoctorCheck{
-				Key:      "backend.lock-rows",
-				Title:    backendLockRowsTitle,
-				Status:   "warn",
-				Detail:   fmt.Sprintf("%d matching lock row(s) exist for %s", len(lockItems), cfg.StateKey),
-				Hint:     "ensure no terraform apply/destroy is still in flight before proceeding",
-				Related:  []string{cfg.TableName, cfg.StateKey},
-				Blocking: false,
-			})
-		default:
-			checks = append(checks, platformOrgDoctorCheck{
-				Key:      "backend.lock-rows",
-				Title:    backendLockRowsTitle,
-				Status:   "ok",
-				Detail:   "no orphaned lock rows found for the current state key",
-				Hint:     "lock rows should remain empty when terraform is idle",
-				Related:  []string{cfg.TableName, cfg.StateKey},
-				Blocking: false,
-			})
-		}
-	}
+	checks = append(checks,
+		checkBackendStateObject(len(stateVersions), stateErr, cfg),
+		checkBackendLockRows(len(lockItems), len(stateVersions), lockErr, cfg),
+	)
 
 	return platformOrgDoctorSection{Title: "Backend Contract", Checks: checks}, nil
+}
+
+func buildStateLiveIndex(liveResources []auditResource) (map[string]auditResource, map[string][]auditResource) {
+	liveByARN := make(map[string]auditResource, len(liveResources))
+	liveByName := make(map[string][]auditResource, len(liveResources))
+	for _, resource := range liveResources {
+		if resource.arn != "" {
+			liveByARN[resource.arn] = resource
+		}
+		if resource.name != "" {
+			key := strings.ToLower(resource.name)
+			liveByName[key] = append(liveByName[key], resource)
+		}
+	}
+	return liveByARN, liveByName
+}
+
+func stateDoctorDriftChecks(mode platformOrgDoctorMode, expected []expectedAuditResource, stateByAddress map[string]terraformStateObject, liveByARN map[string]auditResource, liveByName map[string][]auditResource) (map[string]bool, []platformOrgDoctorCheck) {
+	expectedAddresses := make(map[string]bool, len(expected))
+	var checks []platformOrgDoctorCheck
+	for _, def := range expected {
+		expectedAddresses[def.address] = true
+		stateResource, statePresent := stateByAddress[def.address]
+		liveResource, livePresent := matchExpectedAuditResource(def, liveByARN, liveByName)
+		switch {
+		case !statePresent && livePresent && def.status == "MISSING":
+			checks = append(checks, platformOrgDoctorCheck{
+				Key: "state.outside-state." + def.address, Title: def.address + " is not being recreated on top of an existing object",
+				Status: failOrWarn(mode.LenientState), Detail: fmt.Sprintf("plan expects create, but live object %s already exists outside terraform state", liveResource.name),
+				Hint: "import the existing object or remove it before applying again", Related: []string{def.address, liveResource.name}, Blocking: !mode.LenientState,
+			})
+		case !statePresent && livePresent:
+			checks = append(checks, platformOrgDoctorCheck{
+				Key: "state.missing-address." + def.address, Title: def.address + " is tracked in state",
+				Status: failOrWarn(mode.LenientState), Detail: fmt.Sprintf("live managed object %s exists, but terraform state has no address entry", liveResource.name),
+				Hint: "import the live object or run nuke fallback before applying again", Related: []string{def.address, liveResource.name}, Blocking: !mode.LenientState,
+			})
+		case statePresent && !livePresent && def.status == "OK":
+			checks = append(checks, platformOrgDoctorCheck{
+				Key: "state.deleted-live." + def.address, Title: def.address + " still points to a live object",
+				Status: failOrWarn(mode.LenientState), Detail: fmt.Sprintf("terraform state references %s, but no matching live AWS object was found", stateResource.Name),
+				Hint: "remove or repair the stale state entry before trusting terraform", Related: []string{def.address, stateResource.Name}, Blocking: !mode.LenientState,
+			})
+		case statePresent && livePresent:
+			if def.name != "" && stateResource.Name != "" && def.name != stateResource.Name && liveResource.name == def.name {
+				checks = append(checks, platformOrgDoctorCheck{
+					Key: "state.stale-name." + def.address, Title: def.address + " points at the current physical object",
+					Status: failOrWarn(mode.LenientState), Detail: fmt.Sprintf("state points to %s, but the current planned object is %s", stateResource.Name, def.name),
+					Hint: "refresh or import the current object before applying again", Related: []string{def.address, stateResource.Name, def.name}, Blocking: !mode.LenientState,
+				})
+			} else if def.arn != "" && stateResource.ARN != "" && def.arn != stateResource.ARN && liveResource.arn == def.arn {
+				checks = append(checks, platformOrgDoctorCheck{
+					Key: "state.stale-arn." + def.address, Title: def.address + " points at the current physical ARN",
+					Status: failOrWarn(mode.LenientState), Detail: fmt.Sprintf("state points to %s, but the current planned ARN is %s", stateResource.ARN, def.arn),
+					Hint: "refresh or import the current object before applying again", Related: []string{def.address, stateResource.ARN, def.arn}, Blocking: !mode.LenientState,
+				})
+			}
+		}
+	}
+	return expectedAddresses, checks
+}
+
+func stateDoctorStaleAddressCheck(stateByAddress map[string]terraformStateObject, expectedAddresses map[string]bool) platformOrgDoctorCheck {
+	var staleAddresses []string
+	for address, resource := range stateByAddress {
+		if !expectedAddresses[address] && !excludeTerraformAuditResource(resource.Type) {
+			staleAddresses = append(staleAddresses, address)
+		}
+	}
+	sort.Strings(staleAddresses)
+	if len(staleAddresses) == 0 {
+		return platformOrgDoctorCheck{
+			Key:      "state.extra-addresses",
+			Title:    "terraform state contains only current plan addresses",
+			Status:   "ok",
+			Detail:   "no extra managed state addresses remain outside the current plan inventory",
+			Hint:     "remove state entries that no longer belong to the current plan if they appear",
+			Blocking: false,
+		}
+	}
+	return platformOrgDoctorCheck{
+		Key:      "state.extra-addresses",
+		Title:    "terraform state contains only current plan addresses",
+		Status:   "warn",
+		Detail:   "state contains addresses no longer present in the current plan: " + strings.Join(staleAddresses, ", "),
+		Hint:     "review stale state addresses before relying on terraform destroy/apply decisions",
+		Related:  staleAddresses,
+		Blocking: false,
+	}
 }
 
 func platformOrgStateDoctorSection(ctx context.Context, mode platformOrgDoctorMode) (platformOrgDoctorSection, error) {
@@ -537,16 +632,7 @@ func platformOrgStateDoctorSection(ctx context.Context, mode platformOrgDoctorMo
 	for _, resource := range stateResources {
 		stateByAddress[resource.Address] = resource
 	}
-	liveByARN := make(map[string]auditResource, len(liveResources))
-	liveByName := make(map[string][]auditResource, len(liveResources))
-	for _, resource := range liveResources {
-		if resource.arn != "" {
-			liveByARN[resource.arn] = resource
-		}
-		if resource.name != "" {
-			liveByName[strings.ToLower(resource.name)] = append(liveByName[strings.ToLower(resource.name)], resource)
-		}
-	}
+	liveByARN, liveByName := buildStateLiveIndex(liveResources)
 
 	checks = append(checks, platformOrgDoctorCheck{
 		Key:      "state.summary",
@@ -557,106 +643,165 @@ func platformOrgStateDoctorSection(ctx context.Context, mode platformOrgDoctorMo
 		Blocking: false,
 	})
 
-	expectedAddresses := make(map[string]bool, len(expected))
-	for _, def := range expected {
-		expectedAddresses[def.address] = true
-		stateResource, statePresent := stateByAddress[def.address]
-		liveResource, livePresent := matchExpectedAuditResource(def, liveByARN, liveByName)
-
-		switch {
-		case !statePresent && livePresent && def.status == "MISSING":
-			checks = append(checks, platformOrgDoctorCheck{
-				Key:      "state.outside-state." + def.address,
-				Title:    def.address + " is not being recreated on top of an existing object",
-				Status:   failOrWarn(mode.LenientState),
-				Detail:   fmt.Sprintf("plan expects create, but live object %s already exists outside terraform state", liveResource.name),
-				Hint:     "import the existing object or remove it before applying again",
-				Related:  []string{def.address, liveResource.name},
-				Blocking: !mode.LenientState,
-			})
-		case !statePresent && livePresent:
-			checks = append(checks, platformOrgDoctorCheck{
-				Key:      "state.missing-address." + def.address,
-				Title:    def.address + " is tracked in state",
-				Status:   failOrWarn(mode.LenientState),
-				Detail:   fmt.Sprintf("live managed object %s exists, but terraform state has no address entry", liveResource.name),
-				Hint:     "import the live object or run nuke fallback before applying again",
-				Related:  []string{def.address, liveResource.name},
-				Blocking: !mode.LenientState,
-			})
-		case statePresent && !livePresent && def.status == "OK":
-			checks = append(checks, platformOrgDoctorCheck{
-				Key:      "state.deleted-live." + def.address,
-				Title:    def.address + " still points to a live object",
-				Status:   failOrWarn(mode.LenientState),
-				Detail:   fmt.Sprintf("terraform state references %s, but no matching live AWS object was found", stateResource.Name),
-				Hint:     "remove or repair the stale state entry before trusting terraform",
-				Related:  []string{def.address, stateResource.Name},
-				Blocking: !mode.LenientState,
-			})
-		case statePresent && livePresent:
-			if def.name != "" && stateResource.Name != "" && def.name != stateResource.Name && liveResource.name == def.name {
-				checks = append(checks, platformOrgDoctorCheck{
-					Key:      "state.stale-name." + def.address,
-					Title:    def.address + " points at the current physical object",
-					Status:   failOrWarn(mode.LenientState),
-					Detail:   fmt.Sprintf("state points to %s, but the current planned object is %s", stateResource.Name, def.name),
-					Hint:     "refresh or import the current object before applying again",
-					Related:  []string{def.address, stateResource.Name, def.name},
-					Blocking: !mode.LenientState,
-				})
-			} else if def.arn != "" && stateResource.ARN != "" && def.arn != stateResource.ARN && liveResource.arn == def.arn {
-				checks = append(checks, platformOrgDoctorCheck{
-					Key:      "state.stale-arn." + def.address,
-					Title:    def.address + " points at the current physical ARN",
-					Status:   failOrWarn(mode.LenientState),
-					Detail:   fmt.Sprintf("state points to %s, but the current planned ARN is %s", stateResource.ARN, def.arn),
-					Hint:     "refresh or import the current object before applying again",
-					Related:  []string{def.address, stateResource.ARN, def.arn},
-					Blocking: !mode.LenientState,
-				})
-			}
-		}
-	}
-
-	var staleAddresses []string
-	for address, resource := range stateByAddress {
-		if expectedAddresses[address] {
-			continue
-		}
-		if excludeTerraformAuditResource(resource.Type) {
-			continue
-		}
-		staleAddresses = append(staleAddresses, address)
-	}
-	sort.Strings(staleAddresses)
-	if len(staleAddresses) == 0 {
-		checks = append(checks, platformOrgDoctorCheck{
-			Key:      "state.extra-addresses",
-			Title:    "terraform state contains only current plan addresses",
-			Status:   "ok",
-			Detail:   "no extra managed state addresses remain outside the current plan inventory",
-			Hint:     "remove state entries that no longer belong to the current plan if they appear",
-			Blocking: false,
-		})
-	} else {
-		checks = append(checks, platformOrgDoctorCheck{
-			Key:      "state.extra-addresses",
-			Title:    "terraform state contains only current plan addresses",
-			Status:   "warn",
-			Detail:   "state contains addresses no longer present in the current plan: " + strings.Join(staleAddresses, ", "),
-			Hint:     "review stale state addresses before relying on terraform destroy/apply decisions",
-			Related:  staleAddresses,
-			Blocking: false,
-		})
-	}
+	expectedAddresses, driftChecks := stateDoctorDriftChecks(mode, expected, stateByAddress, liveByARN, liveByName)
+	checks = append(checks, driftChecks...)
+	checks = append(checks, stateDoctorStaleAddressCheck(stateByAddress, expectedAddresses))
 
 	return platformOrgDoctorSection{Title: tfStateIntegrityTitle, Checks: checks}, nil
 }
 
-func platformOrgRuntimeDoctorSection(ctx context.Context, mode platformOrgDoctorMode) (platformOrgDoctorSection, error) {
-	checks := []platformOrgDoctorCheck{}
+func checkRuntimeActivationSchedule(schedule *activationScheduleDetails, org, expectedLambdaARN, expectedScheduleRoleARN string) platformOrgDoctorCheck {
+	if schedule == nil {
+		return platformOrgDoctorCheck{
+			Key: "runtime.schedule", Title: "activation schedule points to the current Lambda and role",
+			Status: "info", Detail: "no one-time activation schedule currently exists",
+			Hint: "this is expected before apply or after the schedule has already fired", Blocking: false,
+		}
+	}
+	status := "ok"
+	detailParts := []string{"schedule present"}
+	if schedule.GroupName != activationScheduleGroupName(org) {
+		status = "fail"
+		detailParts = append(detailParts, "wrong group="+schedule.GroupName)
+	}
+	if schedule.TargetARN != expectedLambdaARN {
+		status = "fail"
+		detailParts = append(detailParts, "target="+schedule.TargetARN)
+	}
+	if schedule.TargetRoleARN != expectedScheduleRoleARN {
+		status = "fail"
+		detailParts = append(detailParts, "role="+schedule.TargetRoleARN)
+	}
+	if schedule.State != schedulertypes.ScheduleStateEnabled {
+		status = "fail"
+		detailParts = append(detailParts, "state="+string(schedule.State))
+	}
+	if schedule.ActionAfterCompletion != schedulertypes.ActionAfterCompletionDelete {
+		status = "fail"
+		detailParts = append(detailParts, "after="+string(schedule.ActionAfterCompletion))
+	}
+	return platformOrgDoctorCheck{
+		Key: "runtime.schedule", Title: "activation schedule points to the current Lambda and role",
+		Status: status, Detail: strings.Join(detailParts, "  "),
+		Hint:     "re-run platform-org apply to rewrite the activation schedule against the current Lambda and scheduler role",
+		Related:  []string{activationScheduleName(org), org + "-activate-cost-tags", org + "-scheduler-invoke-activate"},
+		Blocking: status == "fail",
+	}
+}
 
+func checkRuntimeSchedulerRolePolicy(doc string, exists bool, err error, mode platformOrgDoctorMode, expectedScheduleRole, expectedLambdaARN string) platformOrgDoctorCheck {
+	if err != nil {
+		return platformOrgDoctorCheck{
+			Key: runtimeSchedulerRolePolicyKey, Title: runtimeSchedulerRolePolicyTitle,
+			Status: "fail", Detail: err.Error(),
+			Hint: "repair the scheduler invoke role inline policy", Related: []string{expectedScheduleRole}, Blocking: true,
+		}
+	}
+	if !exists {
+		status, blocking := "info", false
+		if !mode.AllowMissingRuntime {
+			status, blocking = "fail", true
+		}
+		return platformOrgDoctorCheck{
+			Key: runtimeSchedulerRolePolicyKey, Title: runtimeSchedulerRolePolicyTitle,
+			Status: status, Detail: "scheduler invoke role policy is not present",
+			Hint: "apply the platform-org stack to create the scheduler invoke role policy", Related: []string{expectedScheduleRole}, Blocking: blocking,
+		}
+	}
+	status, detail := "ok", "scheduler invoke role policy references the current Lambda ARN"
+	if !strings.Contains(doc, expectedLambdaARN) {
+		status, detail = "fail", "scheduler invoke role policy does not reference "+expectedLambdaARN
+	}
+	return platformOrgDoctorCheck{
+		Key: runtimeSchedulerRolePolicyKey, Title: runtimeSchedulerRolePolicyTitle,
+		Status: status, Detail: detail,
+		Hint: "repair the scheduler invoke role policy so it references the current Lambda ARN", Related: []string{expectedScheduleRole, expectedLambdaARN}, Blocking: status == "fail",
+	}
+}
+
+func checkRuntimeLambdaRolePolicy(doc string, exists bool, err error, mode platformOrgDoctorMode, expectedLambdaName, expectedTopicARN, expectedLogPattern string) platformOrgDoctorCheck {
+	if err != nil {
+		return platformOrgDoctorCheck{
+			Key: runtimeLambdaRolePolicyKey, Title: runtimeLambdaRolePolicyTitle,
+			Status: "fail", Detail: err.Error(),
+			Hint: "repair the Lambda execution role policy", Related: []string{expectedLambdaName}, Blocking: true,
+		}
+	}
+	if !exists {
+		status, blocking := "info", false
+		if !mode.AllowMissingRuntime {
+			status, blocking = "fail", true
+		}
+		return platformOrgDoctorCheck{
+			Key: runtimeLambdaRolePolicyKey, Title: runtimeLambdaRolePolicyTitle,
+			Status: status, Detail: "Lambda execution role policy is not present",
+			Hint: "apply the platform-org stack to create the Lambda execution role policy", Related: []string{expectedLambdaName}, Blocking: blocking,
+		}
+	}
+	status, detail := "ok", "Lambda execution role policy references the current SNS topic and log group pattern"
+	if !strings.Contains(doc, expectedTopicARN) || !strings.Contains(doc, expectedLogPattern) {
+		status, detail = "fail", "Lambda execution role policy does not reference the current SNS topic ARN and log group ARN pattern"
+	}
+	return platformOrgDoctorCheck{
+		Key: runtimeLambdaRolePolicyKey, Title: runtimeLambdaRolePolicyTitle,
+		Status: status, Detail: detail,
+		Hint: "repair the Lambda execution role policy so it references the current topic and log group pattern", Related: []string{expectedLambdaName, expectedTopicARN, expectedLogPattern}, Blocking: status == "fail",
+	}
+}
+
+func checkRuntimeLambdaEnvironment(out *lambda.GetFunctionOutput, err error, expectedLambdaName, expectedTopicARN string) platformOrgDoctorCheck {
+	if err != nil {
+		if isNotFoundError(err) {
+			return platformOrgDoctorCheck{
+				Key: runtimeLambdaEnvironmentKey, Title: runtimeLambdaEnvironmentTitle,
+				Status: "info", Detail: "activation Lambda is not present",
+				Hint: "apply the platform-org stack to create the activation Lambda", Related: []string{expectedLambdaName}, Blocking: false,
+			}
+		}
+		return platformOrgDoctorCheck{
+			Key: runtimeLambdaEnvironmentKey, Title: runtimeLambdaEnvironmentTitle,
+			Status: "fail", Detail: err.Error(),
+			Hint: "repair Lambda access so the function configuration can be inspected", Related: []string{expectedLambdaName}, Blocking: true,
+		}
+	}
+	actualTopicARN := ""
+	if out.Configuration != nil && out.Configuration.Environment != nil && out.Configuration.Environment.Variables != nil {
+		actualTopicARN = out.Configuration.Environment.Variables["PLATFORM_EVENTS_TOPIC_ARN"]
+	}
+	status, detail := "ok", "Lambda environment points to the current platform events topic"
+	if actualTopicARN != expectedTopicARN {
+		status, detail = "fail", fmt.Sprintf("PLATFORM_EVENTS_TOPIC_ARN=%s, expected %s", actualTopicARN, expectedTopicARN)
+	}
+	return platformOrgDoctorCheck{
+		Key: runtimeLambdaEnvironmentKey, Title: runtimeLambdaEnvironmentTitle,
+		Status: status, Detail: detail,
+		Hint: "repair the Lambda environment so it points to the current platform events topic ARN", Related: []string{expectedLambdaName, expectedTopicARN}, Blocking: status == "fail",
+	}
+}
+
+func checkRuntimeLambdaLogGroup(exists bool, err error, mode platformOrgDoctorMode, expectedLogGroup string) platformOrgDoctorCheck {
+	logStatus := "fail"
+	logBlocking := true
+	if err == nil {
+		switch {
+		case exists:
+			logStatus, logBlocking = "ok", false
+		case mode.AllowMissingRuntime:
+			logStatus, logBlocking = "info", false
+		}
+	}
+	return platformOrgDoctorCheck{
+		Key:      "runtime.lambda-log-group",
+		Title:    "activation Lambda log group matches the current function name",
+		Status:   logStatus,
+		Detail:   existsDetail(exists, err, "Lambda log group", expectedLogGroup),
+		Hint:     "ensure the current Lambda log group exists at " + expectedLogGroup,
+		Related:  []string{expectedLogGroup},
+		Blocking: logBlocking,
+	}
+}
+
+func platformOrgRuntimeDoctorSection(ctx context.Context, mode platformOrgDoctorMode) (platformOrgDoctorSection, error) {
 	schedule, err := activationSchedule(ctx, d.org)
 	if err != nil {
 		return platformOrgDoctorSection{}, fmt.Errorf("inspect activation schedule: %w", err)
@@ -670,211 +815,18 @@ func platformOrgRuntimeDoctorSection(ctx context.Context, mode platformOrgDoctor
 	expectedLogGroup := activateLambdaLogGroupName(d.org)
 	expectedLogPattern := fmt.Sprintf("arn:aws:logs:%s:%s:log-group:%s:*", d.region, d.accountID, expectedLogGroup)
 
-	if schedule == nil {
-		checks = append(checks, platformOrgDoctorCheck{
-			Key:      "runtime.schedule",
-			Title:    "activation schedule points to the current Lambda and role",
-			Status:   "info",
-			Detail:   "no one-time activation schedule currently exists",
-			Hint:     "this is expected before apply or after the schedule has already fired",
-			Blocking: false,
-		})
-	} else {
-		status := "ok"
-		detailParts := []string{"schedule present"}
-		if schedule.GroupName != activationScheduleGroupName(d.org) {
-			status = "fail"
-			detailParts = append(detailParts, "wrong group="+schedule.GroupName)
-		}
-		if schedule.TargetARN != expectedLambdaARN {
-			status = "fail"
-			detailParts = append(detailParts, "target="+schedule.TargetARN)
-		}
-		if schedule.TargetRoleARN != expectedScheduleRoleARN {
-			status = "fail"
-			detailParts = append(detailParts, "role="+schedule.TargetRoleARN)
-		}
-		if schedule.State != schedulertypes.ScheduleStateEnabled {
-			status = "fail"
-			detailParts = append(detailParts, "state="+string(schedule.State))
-		}
-		if schedule.ActionAfterCompletion != schedulertypes.ActionAfterCompletionDelete {
-			status = "fail"
-			detailParts = append(detailParts, "after="+string(schedule.ActionAfterCompletion))
-		}
-		checks = append(checks, platformOrgDoctorCheck{
-			Key:      "runtime.schedule",
-			Title:    "activation schedule points to the current Lambda and role",
-			Status:   status,
-			Detail:   strings.Join(detailParts, "  "),
-			Hint:     "re-run platform-org apply to rewrite the activation schedule against the current Lambda and scheduler role",
-			Related:  []string{activationScheduleName(d.org), expectedLambdaName, expectedScheduleRole},
-			Blocking: status == "fail",
-		})
-	}
-
-	rolePolicyDoc, rolePolicyExists, err := getInlineRolePolicyDocument(ctx, expectedScheduleRole, "invoke-activate-lambda")
-	if err != nil {
-		checks = append(checks, platformOrgDoctorCheck{
-			Key:      runtimeSchedulerRolePolicyKey,
-			Title:    runtimeSchedulerRolePolicyTitle,
-			Status:   "fail",
-			Detail:   err.Error(),
-			Hint:     "repair the scheduler invoke role inline policy",
-			Related:  []string{expectedScheduleRole},
-			Blocking: true,
-		})
-	} else if !rolePolicyExists {
-		status := "info"
-		blocking := false
-		detail := "scheduler invoke role policy is not present"
-		if !mode.AllowMissingRuntime {
-			status = "fail"
-			blocking = true
-		}
-		checks = append(checks, platformOrgDoctorCheck{
-			Key:      runtimeSchedulerRolePolicyKey,
-			Title:    runtimeSchedulerRolePolicyTitle,
-			Status:   status,
-			Detail:   detail,
-			Hint:     "apply the platform-org stack to create the scheduler invoke role policy",
-			Related:  []string{expectedScheduleRole},
-			Blocking: blocking,
-		})
-	} else {
-		status := "ok"
-		detail := "scheduler invoke role policy references the current Lambda ARN"
-		if !strings.Contains(rolePolicyDoc, expectedLambdaARN) {
-			status = "fail"
-			detail = "scheduler invoke role policy does not reference " + expectedLambdaARN
-		}
-		checks = append(checks, platformOrgDoctorCheck{
-			Key:      runtimeSchedulerRolePolicyKey,
-			Title:    runtimeSchedulerRolePolicyTitle,
-			Status:   status,
-			Detail:   detail,
-			Hint:     "repair the scheduler invoke role policy so it references the current Lambda ARN",
-			Related:  []string{expectedScheduleRole, expectedLambdaARN},
-			Blocking: status == "fail",
-		})
-	}
-
-	lambdaRolePolicyDoc, lambdaRolePolicyExists, err := getInlineRolePolicyDocument(ctx, expectedLambdaName, "activate-cost-tags")
-	if err != nil {
-		checks = append(checks, platformOrgDoctorCheck{
-			Key:      runtimeLambdaRolePolicyKey,
-			Title:    runtimeLambdaRolePolicyTitle,
-			Status:   "fail",
-			Detail:   err.Error(),
-			Hint:     "repair the Lambda execution role policy",
-			Related:  []string{expectedLambdaName},
-			Blocking: true,
-		})
-	} else if !lambdaRolePolicyExists {
-		status := "info"
-		blocking := false
-		if !mode.AllowMissingRuntime {
-			status = "fail"
-			blocking = true
-		}
-		checks = append(checks, platformOrgDoctorCheck{
-			Key:      runtimeLambdaRolePolicyKey,
-			Title:    runtimeLambdaRolePolicyTitle,
-			Status:   status,
-			Detail:   "Lambda execution role policy is not present",
-			Hint:     "apply the platform-org stack to create the Lambda execution role policy",
-			Related:  []string{expectedLambdaName},
-			Blocking: blocking,
-		})
-	} else {
-		status := "ok"
-		detail := "Lambda execution role policy references the current SNS topic and log group pattern"
-		if !strings.Contains(lambdaRolePolicyDoc, expectedTopicARN) || !strings.Contains(lambdaRolePolicyDoc, expectedLogPattern) {
-			status = "fail"
-			detail = "Lambda execution role policy does not reference the current SNS topic ARN and log group ARN pattern"
-		}
-		checks = append(checks, platformOrgDoctorCheck{
-			Key:      runtimeLambdaRolePolicyKey,
-			Title:    runtimeLambdaRolePolicyTitle,
-			Status:   status,
-			Detail:   detail,
-			Hint:     "repair the Lambda execution role policy so it references the current topic and log group pattern",
-			Related:  []string{expectedLambdaName, expectedTopicARN, expectedLogPattern},
-			Blocking: status == "fail",
-		})
-	}
-
-	lambdaOut, err := lambda.NewFromConfig(d.awsCfg).GetFunction(ctx, &lambda.GetFunctionInput{
-		FunctionName: sdkaws.String(expectedLambdaName),
-	})
-	if err != nil {
-		if isNotFoundError(err) {
-			checks = append(checks, platformOrgDoctorCheck{
-				Key:      runtimeLambdaEnvironmentKey,
-				Title:    runtimeLambdaEnvironmentTitle,
-				Status:   "info",
-				Detail:   "activation Lambda is not present",
-				Hint:     "apply the platform-org stack to create the activation Lambda",
-				Related:  []string{expectedLambdaName},
-				Blocking: false,
-			})
-		} else {
-			checks = append(checks, platformOrgDoctorCheck{
-				Key:      runtimeLambdaEnvironmentKey,
-				Title:    runtimeLambdaEnvironmentTitle,
-				Status:   "fail",
-				Detail:   err.Error(),
-				Hint:     "repair Lambda access so the function configuration can be inspected",
-				Related:  []string{expectedLambdaName},
-				Blocking: true,
-			})
-		}
-	} else {
-		actualTopicARN := ""
-		if lambdaOut.Configuration != nil && lambdaOut.Configuration.Environment != nil && lambdaOut.Configuration.Environment.Variables != nil {
-			actualTopicARN = lambdaOut.Configuration.Environment.Variables["PLATFORM_EVENTS_TOPIC_ARN"]
-		}
-		status := "ok"
-		detail := "Lambda environment points to the current platform events topic"
-		if actualTopicARN != expectedTopicARN {
-			status = "fail"
-			detail = fmt.Sprintf("PLATFORM_EVENTS_TOPIC_ARN=%s, expected %s", actualTopicARN, expectedTopicARN)
-		}
-		checks = append(checks, platformOrgDoctorCheck{
-			Key:      runtimeLambdaEnvironmentKey,
-			Title:    runtimeLambdaEnvironmentTitle,
-			Status:   status,
-			Detail:   detail,
-			Hint:     "repair the Lambda environment so it points to the current platform events topic ARN",
-			Related:  []string{expectedLambdaName, expectedTopicARN},
-			Blocking: status == "fail",
-		})
-	}
-
+	rolePolicyDoc, rolePolicyExists, rolePolicyErr := getInlineRolePolicyDocument(ctx, expectedScheduleRole, "invoke-activate-lambda")
+	lambdaRolePolicyDoc, lambdaRolePolicyExists, lambdaRolePolicyErr := getInlineRolePolicyDocument(ctx, expectedLambdaName, "activate-cost-tags")
+	lambdaOut, lambdaErr := lambda.NewFromConfig(d.awsCfg).GetFunction(ctx, &lambda.GetFunctionInput{FunctionName: sdkaws.String(expectedLambdaName)})
 	logExists, logErr := logGroupExists(ctx, expectedLogGroup)
-	var logStatus string
-	var logBlocking bool
-	switch {
-	case logErr != nil:
-		logStatus = "fail"
-		logBlocking = true
-	case logExists:
-		logStatus = "ok"
-	case mode.AllowMissingRuntime:
-		logStatus = "info"
-	default:
-		logStatus = "fail"
-		logBlocking = true
+
+	checks := []platformOrgDoctorCheck{
+		checkRuntimeActivationSchedule(schedule, d.org, expectedLambdaARN, expectedScheduleRoleARN),
+		checkRuntimeSchedulerRolePolicy(rolePolicyDoc, rolePolicyExists, rolePolicyErr, mode, expectedScheduleRole, expectedLambdaARN),
+		checkRuntimeLambdaRolePolicy(lambdaRolePolicyDoc, lambdaRolePolicyExists, lambdaRolePolicyErr, mode, expectedLambdaName, expectedTopicARN, expectedLogPattern),
+		checkRuntimeLambdaEnvironment(lambdaOut, lambdaErr, expectedLambdaName, expectedTopicARN),
+		checkRuntimeLambdaLogGroup(logExists, logErr, mode, expectedLogGroup),
 	}
-	checks = append(checks, platformOrgDoctorCheck{
-		Key:      "runtime.lambda-log-group",
-		Title:    "activation Lambda log group matches the current function name",
-		Status:   logStatus,
-		Detail:   existsDetail(logExists, logErr, "Lambda log group", expectedLogGroup),
-		Hint:     "ensure the current Lambda log group exists at " + expectedLogGroup,
-		Related:  []string{expectedLogGroup},
-		Blocking: logBlocking,
-	})
 
 	return platformOrgDoctorSection{Title: "Runtime Wiring", Checks: checks}, nil
 }

@@ -16,6 +16,8 @@ import (
 const (
 	testDestroyProdConfirmation = "destroy-prod\n"
 	testPlatformOrgStateKey     = "platform-org/prod/terraform.tfstate"
+	testTFStateRuntimeName      = "ffreis-tf-state-runtime"
+	errUnexpectedResetArgs      = "unexpected reset args: root=%s stack=%s env=%s"
 )
 
 func TestPlanCommandAllowsDetailedExitCodeTwo(t *testing.T) {
@@ -478,7 +480,7 @@ func TestNukeCommandFallsBackWhenDestroyLeavesManagedResources(t *testing.T) {
 	scanManagedPlatformOrgResourcesNukeFn = func(context.Context) ([]auditResource, error) {
 		scanCalls++
 		if scanCalls == 1 {
-			return []auditResource{{status: "OK", resourceType: "s3", name: "ffreis-tf-state-runtime", stack: testPlatformOrgStack}}, nil
+			return []auditResource{{status: "OK", resourceType: "s3", name: testTFStateRuntimeName, stack: testPlatformOrgStack}}, nil
 		}
 		return nil, nil
 	}
@@ -486,7 +488,7 @@ func TestNukeCommandFallsBackWhenDestroyLeavesManagedResources(t *testing.T) {
 	platformOrgCleanupTargetsForNukeFn = func(context.Context) ([]auditResource, error) {
 		targetCalls++
 		if targetCalls <= 2 {
-			return []auditResource{{status: "OK", resourceType: "s3", name: "ffreis-tf-state-runtime", stack: testPlatformOrgStack}}, nil
+			return []auditResource{{status: "OK", resourceType: "s3", name: testTFStateRuntimeName, stack: testPlatformOrgStack}}, nil
 		}
 		return nil, nil
 	}
@@ -500,7 +502,7 @@ func TestNukeCommandFallsBackWhenDestroyLeavesManagedResources(t *testing.T) {
 		if !force {
 			t.Fatal("fallback cleanup should always run with force=true")
 		}
-		if len(resources) != 1 || resources[0].name != "ffreis-tf-state-runtime" {
+		if len(resources) != 1 || resources[0].name != testTFStateRuntimeName {
 			t.Fatalf("unexpected fallback resources: %+v", resources)
 		}
 		return nukeFallbackSummary{Deleted: 1}, nil
@@ -510,7 +512,7 @@ func TestNukeCommandFallsBackWhenDestroyLeavesManagedResources(t *testing.T) {
 	resetBackendStateForNukeFn = func(_ context.Context, gotRoot, gotStack, gotEnv, gotBackupDir string) (nukeBackendResetSummary, error) {
 		resetCalled = true
 		if gotRoot != root || gotStack != stack || gotEnv != testEnv {
-			t.Fatalf("unexpected reset args: root=%s stack=%s env=%s", gotRoot, gotStack, gotEnv)
+			t.Fatalf(errUnexpectedResetArgs, gotRoot, gotStack, gotEnv)
 		}
 		return nukeBackendResetSummary{
 			BucketName:            "ffreis-tf-state-root",
@@ -523,11 +525,8 @@ func TestNukeCommandFallsBackWhenDestroyLeavesManagedResources(t *testing.T) {
 	if err := nukeCmd.RunE(nukeCmd, nil); err != nil {
 		t.Fatalf("nukeCmd.RunE fallback path: %v", err)
 	}
-	if !fallbackCalled {
-		t.Fatal("expected AWS fallback cleanup to run")
-	}
-	if !resetCalled {
-		t.Fatal("expected backend reset to run")
+	if !fallbackCalled || !resetCalled {
+		t.Fatalf("expected: fallbackCalled=%v resetCalled=%v", fallbackCalled, resetCalled)
 	}
 }
 
@@ -613,7 +612,7 @@ func TestNukeCommandFallsBackWhenTerraformInitFails(t *testing.T) {
 	resetBackendStateForNukeFn = func(_ context.Context, gotRoot, gotStack, gotEnv, _ string) (nukeBackendResetSummary, error) {
 		resetCalled = true
 		if gotRoot != root || gotStack != stack || gotEnv != testEnv {
-			t.Fatalf("unexpected reset args: root=%s stack=%s env=%s", gotRoot, gotStack, gotEnv)
+			t.Fatalf(errUnexpectedResetArgs, gotRoot, gotStack, gotEnv)
 		}
 		return nukeBackendResetSummary{}, nil
 	}
@@ -699,7 +698,7 @@ func TestNukeCommandSkipsTerraformWhenBackendMissing(t *testing.T) {
 	}
 	resetBackendStateForNukeFn = func(_ context.Context, gotRoot, gotStack, gotEnv, _ string) (nukeBackendResetSummary, error) {
 		if gotRoot != root || gotStack != stack || gotEnv != testEnv {
-			t.Fatalf("unexpected reset args: root=%s stack=%s env=%s", gotRoot, gotStack, gotEnv)
+			t.Fatalf(errUnexpectedResetArgs, gotRoot, gotStack, gotEnv)
 		}
 		return nukeBackendResetSummary{}, nil
 	}

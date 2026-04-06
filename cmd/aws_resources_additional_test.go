@@ -17,6 +17,11 @@ import (
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
+const (
+	testHTTPHeaderContentType    = "Content-Type"
+	testHTTPContentTypeAMZJSON11 = "application/x-amz-json-1.1"
+)
+
 func testS3DeleteClient(t *testing.T, handler http.HandlerFunc) *s3.Client {
 	t.Helper()
 	server := httptest.NewServer(handler)
@@ -106,7 +111,7 @@ func TestListEventBridgeTargetIDsPaginates(t *testing.T) {
 	call := 0
 	client := testEventBridgeClient(t, func(w http.ResponseWriter, r *http.Request) {
 		call++
-		w.Header().Set("Content-Type", "application/x-amz-json-1.1")
+		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
 		if call == 1 {
 			_, _ = io.WriteString(w, `{"Targets":[{"Id":"one"}],"NextToken":"next"}`)
 			return
@@ -127,7 +132,7 @@ func TestDeleteEventBridgeRuleTargetsBatchesRequests(t *testing.T) {
 
 	removeBatchSizes := []int{}
 	client := testEventBridgeClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/x-amz-json-1.1")
+		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
 		target := r.Header.Get("X-Amz-Target")
 		switch {
 		case strings.Contains(target, "ListTargetsByRule"):
@@ -171,7 +176,7 @@ func TestRemoveEventBridgeTargetBatchReturnsFailedIDs(t *testing.T) {
 	t.Parallel()
 
 	client := testEventBridgeClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/x-amz-json-1.1")
+		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
 		_, _ = io.WriteString(w, `{"FailedEntryCount":1,"FailedEntries":[{"TargetId":"bad-target"}]}`)
 	})
 	err := removeEventBridgeTargetBatch(context.Background(), client, "rule", []string{"bad-target"})
@@ -184,7 +189,7 @@ func TestRemoveEventBridgeTargetBatchSucceedsWithoutFailures(t *testing.T) {
 	t.Parallel()
 
 	client := testEventBridgeClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/x-amz-json-1.1")
+		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
 		_, _ = io.WriteString(w, `{"FailedEntryCount":0}`)
 	})
 	if err := removeEventBridgeTargetBatch(context.Background(), client, "rule", []string{"ok"}); err != nil {
@@ -196,7 +201,7 @@ func TestRemoveEventBridgeTargetBatchReturnsCountWhenEntriesLackIDs(t *testing.T
 	t.Parallel()
 
 	client := testEventBridgeClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/x-amz-json-1.1")
+		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
 		_, _ = io.WriteString(w, `{"FailedEntryCount":1,"FailedEntries":[{}]}`)
 	})
 	err := removeEventBridgeTargetBatch(context.Background(), client, "rule", []string{"ok"})

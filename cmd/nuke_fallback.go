@@ -60,6 +60,14 @@ type nukeBackendResetDynamoAPI interface {
 const (
 	resourceTypeOrganizationsPolicyAttachment = "organizations/policy-attachment"
 	orgPolicyDenyLeaveOrganizationName        = "deny-leave-organization"
+	resourceTypeOrganizationsPolicy           = "organizations/policy"
+	resourceTypeIAMRole                       = "iam/role"
+	resourceTypeIAMOIDCProvider               = "iam/oidc-provider"
+	stackNamePlatformOrg                      = "platform-org"
+	policyNameDenyIAMUserCreation             = "deny-iam-user-creation"
+	policyNameDenyDisableCloudTrail           = "deny-disable-cloudtrail"
+	githubActionsOIDCURL                      = "token.actions.githubusercontent.com"
+	fmtResourceNameErr                        = "%s %s: %v"
 )
 
 var (
@@ -101,7 +109,7 @@ func scanManagedPlatformOrgResourcesForNuke(ctx context.Context) ([]auditResourc
 	filtered := make([]auditResource, 0, len(discovered))
 	seen := make(map[string]bool, len(discovered))
 	for _, resource := range discovered {
-		if resource.stack != "platform-org" || resource.status == "UNOWNED" {
+		if resource.stack != stackNamePlatformOrg || resource.status == "UNOWNED" {
 			continue
 		}
 		key := matchedDiscoveredResourceKey(resource)
@@ -115,6 +123,32 @@ func scanManagedPlatformOrgResourcesForNuke(ctx context.Context) ([]auditResourc
 	return filtered, nil
 }
 
+func recordFallbackDeleteResult(out *commandOutput, resource auditResource, err error, summary *nukeFallbackSummary, errs []string) []string {
+	switch classifyPurgeDeleteError(err) {
+	case purgeFailureGone:
+		summary.Gone++
+		out.Status("muted", "skip", fmt.Sprintf("%s %s already absent", resource.resourceType, resource.name))
+	case purgeFailureManual:
+		summary.Manual++
+		errs = append(errs, fmt.Sprintf(fmtResourceNameErr, resource.resourceType, resource.name, err))
+		out.Status("warn", "skip", fmt.Sprintf("%s %s requires manual cleanup", resource.resourceType, resource.name))
+	case purgeFailureBlocked:
+		summary.Blocked++
+		errs = append(errs, fmt.Sprintf(fmtResourceNameErr, resource.resourceType, resource.name, err))
+		out.Status("warn", "wait", fmt.Sprintf("%s %s is blocked by dependent resources", resource.resourceType, resource.name))
+	case purgeFailureFatal, purgeFailureRetryable:
+		if err != nil {
+			summary.Failed++
+			errs = append(errs, fmt.Sprintf(fmtResourceNameErr, resource.resourceType, resource.name, err))
+			out.Status("error", "fail", fmt.Sprintf("delete %s %s: %v", resource.resourceType, resource.name, err))
+		} else {
+			summary.Deleted++
+			out.Status("ok", "ok", fmt.Sprintf("deleted %s %s", resource.resourceType, resource.name))
+		}
+	}
+	return errs
+}
+
 func runManagedSDKFallbackNuke(ctx context.Context, out *commandOutput, resources []auditResource, force bool) (nukeFallbackSummary, error) {
 	summary := nukeFallbackSummary{}
 	cc := newCloudControlClient(d.awsCfg)
@@ -123,28 +157,7 @@ func runManagedSDKFallbackNuke(ctx context.Context, out *commandOutput, resource
 	for _, resource := range resources {
 		out.Status("info", "cleanup", fmt.Sprintf("deleting %s %s", resource.resourceType, resource.name))
 		err := deleteManagedResourceWithFallback(ctx, cc, resource, force)
-		switch classifyPurgeDeleteError(err) {
-		case purgeFailureGone:
-			summary.Gone++
-			out.Status("muted", "skip", fmt.Sprintf("%s %s already absent", resource.resourceType, resource.name))
-		case purgeFailureManual:
-			summary.Manual++
-			errs = append(errs, fmt.Sprintf("%s %s: %v", resource.resourceType, resource.name, err))
-			out.Status("warn", "skip", fmt.Sprintf("%s %s requires manual cleanup", resource.resourceType, resource.name))
-		case purgeFailureBlocked:
-			summary.Blocked++
-			errs = append(errs, fmt.Sprintf("%s %s: %v", resource.resourceType, resource.name, err))
-			out.Status("warn", "wait", fmt.Sprintf("%s %s is blocked by dependent resources", resource.resourceType, resource.name))
-		case purgeFailureFatal, purgeFailureRetryable:
-			if err != nil {
-				summary.Failed++
-				errs = append(errs, fmt.Sprintf("%s %s: %v", resource.resourceType, resource.name, err))
-				out.Status("error", "fail", fmt.Sprintf("delete %s %s: %v", resource.resourceType, resource.name, err))
-			} else {
-				summary.Deleted++
-				out.Status("ok", "ok", fmt.Sprintf("deleted %s %s", resource.resourceType, resource.name))
-			}
-		}
+		errs = recordFallbackDeleteResult(out, resource, err, &summary, errs)
 	}
 
 	if len(errs) > 0 {
@@ -200,15 +213,7 @@ func platformOrgCleanupTargetsForNuke(ctx context.Context) ([]auditResource, err
 	for _, resource := range targets {
 		out = append(out, resource)
 	}
-	sort.Slice(out, func(i, j int) bool {
-		if nukeCleanupTargetRank(out[i]) != nukeCleanupTargetRank(out[j]) {
-			return nukeCleanupTargetRank(out[i]) < nukeCleanupTargetRank(out[j])
-		}
-		if out[i].resourceType != out[j].resourceType {
-			return out[i].resourceType < out[j].resourceType
-		}
-		return out[i].name < out[j].name
-	})
+	sort.Slice(out, func(i, j int) bool { return nukeCleanupTargetLess(out[i], out[j]) })
 	return out, nil
 }
 
@@ -315,101 +320,101 @@ func explicitPlatformOrgCleanupTargets(ctx context.Context) ([]auditResource, er
 
 	checks := []existsCheck{
 		{
-			resource: auditResource{status: "OK", resourceType: "organizations/organization", name: "organization", stack: "platform-org"},
+			resource: auditResource{status: "OK", resourceType: "organizations/organization", name: "organization", stack: stackNamePlatformOrg},
 			exists:   organizationExists,
 		},
 		{
-			resource: auditResource{status: "OK", resourceType: "organizations/organizational-unit", name: "environments", stack: "platform-org"},
+			resource: auditResource{status: "OK", resourceType: "organizations/organizational-unit", name: "environments", stack: stackNamePlatformOrg},
 			exists: func(ctx context.Context) (bool, error) {
 				return organizationalUnitExists(ctx, "environments")
 			},
 		},
 		{
-			resource: auditResource{status: "OK", resourceType: "organizations/policy", name: "deny-iam-user-creation", stack: "platform-org"},
+			resource: auditResource{status: "OK", resourceType: resourceTypeOrganizationsPolicy, name: policyNameDenyIAMUserCreation, stack: stackNamePlatformOrg},
 			exists: func(ctx context.Context) (bool, error) {
-				return organizationPolicyExists(ctx, "deny-iam-user-creation")
+				return organizationPolicyExists(ctx, policyNameDenyIAMUserCreation)
 			},
 		},
 		{
-			resource: auditResource{status: "OK", resourceType: "organizations/policy", name: "deny-disable-cloudtrail", stack: "platform-org"},
+			resource: auditResource{status: "OK", resourceType: resourceTypeOrganizationsPolicy, name: policyNameDenyDisableCloudTrail, stack: stackNamePlatformOrg},
 			exists: func(ctx context.Context) (bool, error) {
-				return organizationPolicyExists(ctx, "deny-disable-cloudtrail")
+				return organizationPolicyExists(ctx, policyNameDenyDisableCloudTrail)
 			},
 		},
 		{
-			resource: auditResource{status: "OK", resourceType: "organizations/policy", name: orgPolicyDenyLeaveOrganizationName, stack: "platform-org"},
+			resource: auditResource{status: "OK", resourceType: resourceTypeOrganizationsPolicy, name: orgPolicyDenyLeaveOrganizationName, stack: stackNamePlatformOrg},
 			exists: func(ctx context.Context) (bool, error) {
 				return organizationPolicyExists(ctx, "deny-leave-organization")
 			},
 		},
 		{
-			resource: auditResource{status: "OK", resourceType: resourceTypeOrganizationsPolicyAttachment, name: "deny-iam-user-creation@environments", stack: "platform-org"},
+			resource: auditResource{status: "OK", resourceType: resourceTypeOrganizationsPolicyAttachment, name: "deny-iam-user-creation@environments", stack: stackNamePlatformOrg},
 			exists: func(ctx context.Context) (bool, error) {
-				return organizationPolicyAttachmentExists(ctx, "deny-iam-user-creation", "environments")
+				return organizationPolicyAttachmentExists(ctx, policyNameDenyIAMUserCreation, "environments")
 			},
 		},
 		{
-			resource: auditResource{status: "OK", resourceType: resourceTypeOrganizationsPolicyAttachment, name: "deny-disable-cloudtrail@environments", stack: "platform-org"},
+			resource: auditResource{status: "OK", resourceType: resourceTypeOrganizationsPolicyAttachment, name: "deny-disable-cloudtrail@environments", stack: stackNamePlatformOrg},
 			exists: func(ctx context.Context) (bool, error) {
-				return organizationPolicyAttachmentExists(ctx, "deny-disable-cloudtrail", "environments")
+				return organizationPolicyAttachmentExists(ctx, policyNameDenyDisableCloudTrail, "environments")
 			},
 		},
 		{
-			resource: auditResource{status: "OK", resourceType: resourceTypeOrganizationsPolicyAttachment, name: "deny-leave-organization@environments", stack: "platform-org"},
+			resource: auditResource{status: "OK", resourceType: resourceTypeOrganizationsPolicyAttachment, name: "deny-leave-organization@environments", stack: stackNamePlatformOrg},
 			exists: func(ctx context.Context) (bool, error) {
 				return organizationPolicyAttachmentExists(ctx, orgPolicyDenyLeaveOrganizationName, "environments")
 			},
 		},
 		{
-			resource: auditResource{status: "OK", resourceType: "budgets/budget", name: platformAdminBudgetName(d.org), stack: "platform-org"},
+			resource: auditResource{status: "OK", resourceType: "budgets/budget", name: platformAdminBudgetName(d.org), stack: stackNamePlatformOrg},
 			exists: func(ctx context.Context) (bool, error) {
 				return budgetExists(ctx, platformAdminBudgetName(d.org))
 			},
 		},
 		{
-			resource: auditResource{status: "OK", resourceType: "iam/role", name: activateLambdaName(d.org), stack: "platform-org"},
+			resource: auditResource{status: "OK", resourceType: resourceTypeIAMRole, name: activateLambdaName(d.org), stack: stackNamePlatformOrg},
 			exists: func(ctx context.Context) (bool, error) {
 				return iamRoleExists(ctx, activateLambdaName(d.org))
 			},
 		},
 		{
-			resource: auditResource{status: "OK", resourceType: "iam/role", name: schedulerInvokeRoleName(d.org), stack: "platform-org"},
+			resource: auditResource{status: "OK", resourceType: resourceTypeIAMRole, name: schedulerInvokeRoleName(d.org), stack: stackNamePlatformOrg},
 			exists: func(ctx context.Context) (bool, error) {
 				return iamRoleExists(ctx, schedulerInvokeRoleName(d.org))
 			},
 		},
 		{
-			resource: auditResource{status: "OK", resourceType: "lambda/function", name: activateLambdaName(d.org), stack: "platform-org"},
+			resource: auditResource{status: "OK", resourceType: "lambda/function", name: activateLambdaName(d.org), stack: stackNamePlatformOrg},
 			exists: func(ctx context.Context) (bool, error) {
 				return lambdaFunctionExists(ctx, activateLambdaName(d.org))
 			},
 		},
 		{
-			resource: auditResource{status: "OK", resourceType: "logs/log-group", name: activateLambdaLogGroupName(d.org), stack: "platform-org"},
+			resource: auditResource{status: "OK", resourceType: "logs/log-group", name: activateLambdaLogGroupName(d.org), stack: stackNamePlatformOrg},
 			exists: func(ctx context.Context) (bool, error) {
 				return logGroupExists(ctx, activateLambdaLogGroupName(d.org))
 			},
 		},
 		{
-			resource: auditResource{status: "OK", resourceType: "resource-groups/group", name: bootstrapLayerGroupName(d.org), stack: "platform-org"},
+			resource: auditResource{status: "OK", resourceType: "resource-groups/group", name: bootstrapLayerGroupName(d.org), stack: stackNamePlatformOrg},
 			exists: func(ctx context.Context) (bool, error) {
 				return resourceGroupExists(ctx, bootstrapLayerGroupName(d.org))
 			},
 		},
 		{
-			resource: auditResource{status: "OK", resourceType: "scheduler/schedule-group", name: activationScheduleGroupName(d.org), stack: "platform-org"},
+			resource: auditResource{status: "OK", resourceType: "scheduler/schedule-group", name: activationScheduleGroupName(d.org), stack: stackNamePlatformOrg},
 			exists: func(ctx context.Context) (bool, error) {
 				return schedulerGroupExists(ctx, activationScheduleGroupName(d.org))
 			},
 		},
 		{
-			resource: auditResource{status: "OK", resourceType: "dynamodb/table", name: runtimeLockTableName(d.org), stack: "platform-org"},
+			resource: auditResource{status: "OK", resourceType: "dynamodb/table", name: runtimeLockTableName(d.org), stack: stackNamePlatformOrg},
 			exists: func(ctx context.Context) (bool, error) {
 				return dynamoTableExists(ctx, runtimeLockTableName(d.org))
 			},
 		},
 		{
-			resource: auditResource{status: "OK", resourceType: "s3", name: runtimeStateBucketName(d.org), stack: "platform-org"},
+			resource: auditResource{status: "OK", resourceType: "s3", name: runtimeStateBucketName(d.org), stack: stackNamePlatformOrg},
 			exists: func(ctx context.Context) (bool, error) {
 				return s3BucketExists(ctx, runtimeStateBucketName(d.org))
 			},
@@ -419,7 +424,7 @@ func explicitPlatformOrgCleanupTargets(ctx context.Context) ([]auditResource, er
 	for accountName := range cfg.Accounts {
 		name := accountName
 		checks = append(checks, existsCheck{
-			resource: auditResource{status: "OK", resourceType: "organizations/account", name: name, stack: "platform-org"},
+			resource: auditResource{status: "OK", resourceType: "organizations/account", name: name, stack: stackNamePlatformOrg},
 			exists: func(ctx context.Context) (bool, error) {
 				return organizationAccountExists(ctx, name)
 			},
@@ -427,18 +432,18 @@ func explicitPlatformOrgCleanupTargets(ctx context.Context) ([]auditResource, er
 	}
 
 	resources := make([]auditResource, 0, len(checks)+1)
-	oidcARN, oidcExists, err := oidcProviderARNByURL(ctx, "token.actions.githubusercontent.com")
+	oidcARN, oidcExists, err := oidcProviderARNByURL(ctx, githubActionsOIDCURL)
 	if err != nil {
 		if d.log != nil {
-			d.log.Warn("explicit platform-org inventory check failed", "resource_type", "iam/oidc-provider", "name", "token.actions.githubusercontent.com", "error", err)
+			d.log.Warn("explicit platform-org inventory check failed", "resource_type", resourceTypeIAMOIDCProvider, "name", githubActionsOIDCURL, "error", err)
 		}
 	} else if oidcExists {
 		resources = append(resources, auditResource{
 			status:       "OK",
-			resourceType: "iam/oidc-provider",
-			name:         "token.actions.githubusercontent.com",
+			resourceType: resourceTypeIAMOIDCProvider,
+			name:         githubActionsOIDCURL,
 			arn:          oidcARN,
-			stack:        "platform-org",
+			stack:        stackNamePlatformOrg,
 		})
 	}
 	for _, check := range checks {
@@ -487,7 +492,7 @@ func nukeCleanupTargetRank(resource auditResource) int {
 		return 1
 	case "logs/log-group":
 		return 2
-	case "iam/role":
+	case resourceTypeIAMRole:
 		return 3
 	case "scheduler/schedule-group":
 		return 4
@@ -495,7 +500,7 @@ func nukeCleanupTargetRank(resource auditResource) int {
 		return 5
 	case "budgets/budget":
 		return 6
-	case "iam/oidc-provider":
+	case resourceTypeIAMOIDCProvider:
 		return 7
 	case "dynamodb/table":
 		return 8
@@ -503,7 +508,7 @@ func nukeCleanupTargetRank(resource auditResource) int {
 		return 9
 	case "organizations/policy-attachment":
 		return 10
-	case "organizations/policy":
+	case resourceTypeOrganizationsPolicy:
 		return 11
 	case "organizations/account":
 		return 12
@@ -514,6 +519,16 @@ func nukeCleanupTargetRank(resource auditResource) int {
 	default:
 		return 20
 	}
+}
+
+func nukeCleanupTargetLess(a, b auditResource) bool {
+	if nukeCleanupTargetRank(a) != nukeCleanupTargetRank(b) {
+		return nukeCleanupTargetRank(a) < nukeCleanupTargetRank(b)
+	}
+	if a.resourceType != b.resourceType {
+		return a.resourceType < b.resourceType
+	}
+	return a.name < b.name
 }
 
 func loadBackendStateConfigForNuke(root, env string) (nukeBackendStateConfig, error) {
@@ -563,16 +578,97 @@ func parseBackendConfigFile(path string) (map[string]string, error) {
 	return values, nil
 }
 
+func backupBackendStateData(ctx context.Context, s3Client nukeBackendResetS3API, dynamoClient nukeBackendResetDynamoAPI, cfg nukeBackendStateConfig, stateVersions []s3types.ObjectVersion, deleteMarkers []s3types.DeleteMarkerEntry, lockItems []map[string]dbtypes.AttributeValue, backupDir string) (string, error) {
+	if len(stateVersions) == 0 && len(deleteMarkers) == 0 && len(lockItems) == 0 {
+		return "", nil
+	}
+	targetDir := filepath.Join(backupDir, "backend-reset")
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		return "", err
+	}
+	if len(stateVersions) > 0 || len(deleteMarkers) > 0 {
+		metadata, err := backupStateObjectVersions(ctx, s3Client, cfg.BucketName, cfg.StateKey, filepath.Join(targetDir, "s3"))
+		if err != nil {
+			return "", err
+		}
+		if err := writeJSONFile(filepath.Join(targetDir, "s3", "manifest.json"), metadata); err != nil {
+			return "", err
+		}
+	}
+	if len(lockItems) > 0 {
+		if err := backupLockItems(lockItems, filepath.Join(targetDir, "dynamodb", "lock-items.json")); err != nil {
+			return "", err
+		}
+	}
+	return targetDir, nil
+}
+
+func deleteStateVersionsAndMarkers(ctx context.Context, client nukeBackendResetS3API, cfg nukeBackendStateConfig, stateVersions []s3types.ObjectVersion, deleteMarkers []s3types.DeleteMarkerEntry) (int, int, error) {
+	deletedVersions, deletedMarkers := 0, 0
+	for _, version := range stateVersions {
+		_, err := client.DeleteObject(ctx, &s3.DeleteObjectInput{
+			Bucket:    sdkaws.String(cfg.BucketName),
+			Key:       sdkaws.String(cfg.StateKey),
+			VersionId: version.VersionId,
+		})
+		if err != nil && !isNotFoundError(err) {
+			return deletedVersions, deletedMarkers, fmt.Errorf("delete backend state version %s: %w", sdkaws.ToString(version.VersionId), err)
+		}
+		deletedVersions++
+	}
+	for _, marker := range deleteMarkers {
+		_, err := client.DeleteObject(ctx, &s3.DeleteObjectInput{
+			Bucket:    sdkaws.String(cfg.BucketName),
+			Key:       sdkaws.String(cfg.StateKey),
+			VersionId: marker.VersionId,
+		})
+		if err != nil && !isNotFoundError(err) {
+			return deletedVersions, deletedMarkers, fmt.Errorf("delete backend state delete marker %s: %w", sdkaws.ToString(marker.VersionId), err)
+		}
+		deletedMarkers++
+	}
+	return deletedVersions, deletedMarkers, nil
+}
+
+func deleteLockRows(ctx context.Context, client nukeBackendResetDynamoAPI, tableName string, lockItems []map[string]dbtypes.AttributeValue) (int, error) {
+	deleted := 0
+	for _, item := range lockItems {
+		lockID := lockItemString(item, "LockID")
+		if lockID == "" {
+			continue
+		}
+		_, err := client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
+			TableName: sdkaws.String(tableName),
+			Key: map[string]dbtypes.AttributeValue{
+				"LockID": &dbtypes.AttributeValueMemberS{Value: lockID},
+			},
+		})
+		if err != nil && !isNotFoundError(err) {
+			return deleted, fmt.Errorf("delete backend lock row %s: %w", lockID, err)
+		}
+		deleted++
+	}
+	return deleted, nil
+}
+
+func removeLocalTerraformArtifacts(stack string) error {
+	for _, target := range []string{
+		filepath.Join(stack, ".terraform"),
+		filepath.Join(stack, ".terraform.tfstate.lock.info"),
+	} {
+		if err := os.RemoveAll(target); err != nil {
+			return fmt.Errorf("remove %s: %w", target, err)
+		}
+	}
+	return nil
+}
+
 func resetBackendStateForNuke(ctx context.Context, root, stack, env, backupDir string) (nukeBackendResetSummary, error) {
 	cfg, err := loadBackendStateConfigForNukeFn(root, env)
 	if err != nil {
 		return nukeBackendResetSummary{}, err
 	}
-	summary := nukeBackendResetSummary{
-		BucketName: cfg.BucketName,
-		TableName:  cfg.TableName,
-		StateKey:   cfg.StateKey,
-	}
+	summary := nukeBackendResetSummary{BucketName: cfg.BucketName, TableName: cfg.TableName, StateKey: cfg.StateKey}
 
 	s3Client := newNukeBackendResetS3ClientFn(d.awsCfg)
 	dynamoClient := newNukeBackendResetDynamoClientFn(d.awsCfg)
@@ -586,76 +682,23 @@ func resetBackendStateForNuke(ctx context.Context, root, stack, env, backupDir s
 		return nukeBackendResetSummary{}, err
 	}
 
-	if len(stateVersions) > 0 || len(deleteMarkers) > 0 || len(lockItems) > 0 {
-		targetDir := filepath.Join(backupDir, "backend-reset")
-		if err := os.MkdirAll(targetDir, 0o755); err != nil {
-			return nukeBackendResetSummary{}, err
-		}
-		if len(stateVersions) > 0 || len(deleteMarkers) > 0 {
-			metadata, err := backupStateObjectVersions(ctx, s3Client, cfg.BucketName, cfg.StateKey, filepath.Join(targetDir, "s3"))
-			if err != nil {
-				return nukeBackendResetSummary{}, err
-			}
-			if err := writeJSONFile(filepath.Join(targetDir, "s3", "manifest.json"), metadata); err != nil {
-				return nukeBackendResetSummary{}, err
-			}
-		}
-		if len(lockItems) > 0 {
-			if err := backupLockItems(lockItems, filepath.Join(targetDir, "dynamodb", "lock-items.json")); err != nil {
-				return nukeBackendResetSummary{}, err
-			}
-		}
-		summary.BackupDir = targetDir
+	summary.BackupDir, err = backupBackendStateData(ctx, s3Client, dynamoClient, cfg, stateVersions, deleteMarkers, lockItems, backupDir)
+	if err != nil {
+		return nukeBackendResetSummary{}, err
 	}
 
-	for _, version := range stateVersions {
-		_, err := s3Client.DeleteObject(ctx, &s3.DeleteObjectInput{
-			Bucket:    sdkaws.String(cfg.BucketName),
-			Key:       sdkaws.String(cfg.StateKey),
-			VersionId: version.VersionId,
-		})
-		if err != nil && !isNotFoundError(err) {
-			return nukeBackendResetSummary{}, fmt.Errorf("delete backend state version %s: %w", sdkaws.ToString(version.VersionId), err)
-		}
-		summary.DeletedStateVersions++
-	}
-	for _, marker := range deleteMarkers {
-		_, err := s3Client.DeleteObject(ctx, &s3.DeleteObjectInput{
-			Bucket:    sdkaws.String(cfg.BucketName),
-			Key:       sdkaws.String(cfg.StateKey),
-			VersionId: marker.VersionId,
-		})
-		if err != nil && !isNotFoundError(err) {
-			return nukeBackendResetSummary{}, fmt.Errorf("delete backend state delete marker %s: %w", sdkaws.ToString(marker.VersionId), err)
-		}
-		summary.DeletedDeleteMarkers++
+	summary.DeletedStateVersions, summary.DeletedDeleteMarkers, err = deleteStateVersionsAndMarkers(ctx, s3Client, cfg, stateVersions, deleteMarkers)
+	if err != nil {
+		return nukeBackendResetSummary{}, err
 	}
 
-	for _, item := range lockItems {
-		lockID := lockItemString(item, "LockID")
-		if lockID == "" {
-			continue
-		}
-		_, err := dynamoClient.DeleteItem(ctx, &dynamodb.DeleteItemInput{
-			TableName: sdkaws.String(cfg.TableName),
-			Key: map[string]dbtypes.AttributeValue{
-				"LockID": &dbtypes.AttributeValueMemberS{Value: lockID},
-			},
-		})
-		if err != nil && !isNotFoundError(err) {
-			return nukeBackendResetSummary{}, fmt.Errorf("delete backend lock row %s: %w", lockID, err)
-		}
-		summary.DeletedLockEntries++
+	summary.DeletedLockEntries, err = deleteLockRows(ctx, dynamoClient, cfg.TableName, lockItems)
+	if err != nil {
+		return nukeBackendResetSummary{}, err
 	}
 
-	localArtifacts := []string{
-		filepath.Join(stack, ".terraform"),
-		filepath.Join(stack, ".terraform.tfstate.lock.info"),
-	}
-	for _, target := range localArtifacts {
-		if err := os.RemoveAll(target); err != nil {
-			return nukeBackendResetSummary{}, fmt.Errorf("remove %s: %w", target, err)
-		}
+	if err := removeLocalTerraformArtifacts(stack); err != nil {
+		return nukeBackendResetSummary{}, err
 	}
 	summary.RemovedLocalTerraform = true
 
@@ -684,16 +727,8 @@ func listStateObjectVersions(ctx context.Context, client nukeBackendResetS3API, 
 		if err != nil {
 			return nil, nil, fmt.Errorf("list backend state versions %s/%s: %w", bucket, stateKey, err)
 		}
-		for _, version := range out.Versions {
-			if sdkaws.ToString(version.Key) == stateKey {
-				versions = append(versions, version)
-			}
-		}
-		for _, marker := range out.DeleteMarkers {
-			if sdkaws.ToString(marker.Key) == stateKey {
-				markers = append(markers, marker)
-			}
-		}
+		versions = appendMatchingVersions(versions, out.Versions, stateKey)
+		markers = appendMatchingMarkers(markers, out.DeleteMarkers, stateKey)
 		if !sdkaws.ToBool(out.IsTruncated) {
 			break
 		}
@@ -701,6 +736,24 @@ func listStateObjectVersions(ctx context.Context, client nukeBackendResetS3API, 
 		versionMarker = out.NextVersionIdMarker
 	}
 	return versions, markers, nil
+}
+
+func appendMatchingVersions(dst []s3types.ObjectVersion, src []s3types.ObjectVersion, key string) []s3types.ObjectVersion {
+	for _, v := range src {
+		if sdkaws.ToString(v.Key) == key {
+			dst = append(dst, v)
+		}
+	}
+	return dst
+}
+
+func appendMatchingMarkers(dst []s3types.DeleteMarkerEntry, src []s3types.DeleteMarkerEntry, key string) []s3types.DeleteMarkerEntry {
+	for _, m := range src {
+		if sdkaws.ToString(m.Key) == key {
+			dst = append(dst, m)
+		}
+	}
+	return dst
 }
 
 func backupStateObjectVersions(ctx context.Context, client nukeBackendResetS3API, bucket, stateKey, dir string) ([]map[string]any, error) {

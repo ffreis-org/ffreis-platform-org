@@ -26,9 +26,9 @@ func (e *ErrNotReady) Error() string {
 	return fmt.Sprintf("cost allocation tags not ready yet (~24h AWS propagation): %v", e.Missing)
 }
 
-// CostExplorerAPI is the minimal CE surface required here, kept as an interface
+// CostAllocationTagsUpdater is the minimal CE surface required here, kept as an interface
 // so it can be mocked in tests.
-type CostExplorerAPI interface {
+type CostAllocationTagsUpdater interface {
 	UpdateCostAllocationTagsStatus(ctx context.Context,
 		input *costexplorer.UpdateCostAllocationTagsStatusInput,
 		optFns ...func(*costexplorer.Options),
@@ -41,7 +41,7 @@ type CostExplorerAPI interface {
 // returns nil. If AWS hasn't yet discovered the tag keys (fresh account, ~24h
 // propagation window), it returns *ErrNotReady. Any other error is returned
 // as-is.
-func Activate(ctx context.Context, client CostExplorerAPI) error {
+func Activate(ctx context.Context, client CostAllocationTagsUpdater) error {
 	entries := make([]cetypes.CostAllocationTagStatusEntry, len(CostAllocationTags))
 	for i, key := range CostAllocationTags {
 		entries[i] = cetypes.CostAllocationTagStatusEntry{

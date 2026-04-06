@@ -22,6 +22,7 @@ import (
 
 const (
 	testPlatformOrgStack         = "platform-org"
+	testMissingRoleName          = "missing-role"
 	testExpectedResourcesSection = "Expected Platform Org Resources"
 	testManualBucketName         = "manual-bucket"
 	testPlatformEventsName       = "platform-events"
@@ -316,7 +317,7 @@ func TestBuildAuditSectionsSeparatesExpectedOtherManagedAndUnowned(t *testing.T)
 							{
 								address:      "aws_iam_role.missing",
 								resourceType: "aws_iam_role",
-								name:         "missing-role",
+								name:         testMissingRoleName,
 								stack:        testPlatformOrgStack,
 								status:       "MISSING",
 							},
@@ -331,7 +332,7 @@ func TestBuildAuditSectionsSeparatesExpectedOtherManagedAndUnowned(t *testing.T)
 			{
 				status:       "OK",
 				resourceType: "iam/role",
-				name:         "missing-role",
+				name:         testMissingRoleName,
 				stack:        testPlatformOrgStack,
 			},
 		}, nil
@@ -373,7 +374,7 @@ func TestBuildAuditSectionsSeparatesExpectedOtherManagedAndUnowned(t *testing.T)
 	if sections.expected[0].status != "OK" || sections.expected[1].status != "WARN" {
 		t.Fatalf("unexpected expected statuses/order: %#v", sections.expected)
 	}
-	if sections.expected[0].name != "missing-role" {
+	if sections.expected[0].name != testMissingRoleName {
 		t.Fatalf("expected explicit live inventory to turn missing-role into an expected OK row: %#v", sections.expected[0])
 	}
 	if sections.extra[0].name != "platform-org-ephemeral" || sections.otherManaged[0].name != testPlatformEventsName || sections.unowned[0].name != testManualBucketName {
@@ -429,7 +430,7 @@ func TestAuditCommandRunEPrintsSectionSummary(t *testing.T) {
 							{
 								address:      "aws_iam_role.missing",
 								resourceType: "aws_iam_role",
-								name:         "missing-role",
+								name:         testMissingRoleName,
 								stack:        testPlatformOrgStack,
 								status:       "MISSING",
 							},

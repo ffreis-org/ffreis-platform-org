@@ -55,7 +55,7 @@ func TestDeleteSchedulePageReturnsDeleteError(t *testing.T) {
 	}
 	_, err := deleteSchedulePage(context.Background(), "group", []schedulertypes.ScheduleSummary{{Name: sdkaws.String("a")}})
 	if err == nil || err.Error() != "boom" {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 }
 
@@ -94,7 +94,7 @@ func TestDeletePendingScheduleReturnsUnexpectedError(t *testing.T) {
 	}
 	err := deletePendingSchedule(context.Background(), "group", "name")
 	if err == nil || err.Error() != "boom" {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 }
 
@@ -106,7 +106,7 @@ func TestDeletePendingSchedulesReturnsListError(t *testing.T) {
 	}
 	_, err := deletePendingSchedules(context.Background(), "org")
 	if err == nil || err.Error() != "list failed" {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 }
 
@@ -125,7 +125,7 @@ func TestDeletePendingSchedulesReturnsDeleteError(t *testing.T) {
 	}
 	_, err := deletePendingSchedules(context.Background(), "org")
 	if err == nil || err.Error() != "delete failed" {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 }
 
@@ -139,7 +139,7 @@ func TestCleanupInventorySourcesForNukeWrapsSourceError(t *testing.T) {
 	}
 	_, err := cleanupInventorySourcesForNuke(context.Background())
 	if err == nil || err.Error() != "runtime cleanup: boom" {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 }
 

@@ -100,15 +100,9 @@ func (o *commandOutput) Table(headers []string, rows [][]string) error {
 	return w.Flush()
 }
 
-func (o *commandOutput) writeRichTable(headers []string, rows [][]string) error {
-	styledHeaders := make([]string, len(headers))
-	copy(styledHeaders, headers)
-	for i, h := range styledHeaders {
-		styledHeaders[i] = o.ui.Key(h)
-	}
-
+func computeColumnWidths(headers []string, rows [][]string) []int {
 	colWidths := make([]int, len(headers))
-	for i, h := range styledHeaders {
+	for i, h := range headers {
 		colWidths[i] = lipgloss.Width(h)
 	}
 	for _, row := range rows {
@@ -121,27 +115,35 @@ func (o *commandOutput) writeRichTable(headers []string, rows [][]string) error 
 			}
 		}
 	}
+	return colWidths
+}
 
-	writeRow := func(row []string) {
-		for i, cell := range row {
-			if i >= len(colWidths) {
-				break
-			}
-			if i > 0 {
-				_, _ = io.WriteString(o.out, "  ")
-			}
-			_, _ = io.WriteString(o.out, cell)
-			padding := colWidths[i] - lipgloss.Width(cell)
-			if padding > 0 {
-				_, _ = io.WriteString(o.out, strings.Repeat(" ", padding))
-			}
+func (o *commandOutput) writeTableRow(row []string, colWidths []int) {
+	for i, cell := range row {
+		if i >= len(colWidths) {
+			break
 		}
-		_, _ = io.WriteString(o.out, "\n")
+		if i > 0 {
+			_, _ = io.WriteString(o.out, "  ")
+		}
+		_, _ = io.WriteString(o.out, cell)
+		if padding := colWidths[i] - lipgloss.Width(cell); padding > 0 {
+			_, _ = io.WriteString(o.out, strings.Repeat(" ", padding))
+		}
 	}
+	_, _ = io.WriteString(o.out, "\n")
+}
 
-	writeRow(styledHeaders)
+func (o *commandOutput) writeRichTable(headers []string, rows [][]string) error {
+	styledHeaders := make([]string, len(headers))
+	copy(styledHeaders, headers)
+	for i, h := range styledHeaders {
+		styledHeaders[i] = o.ui.Key(h)
+	}
+	colWidths := computeColumnWidths(styledHeaders, rows)
+	o.writeTableRow(styledHeaders, colWidths)
 	for _, row := range rows {
-		writeRow(row)
+		o.writeTableRow(row, colWidths)
 	}
 	return nil
 }

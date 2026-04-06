@@ -37,6 +37,9 @@ const (
 const (
 	purgeAlreadyAbsentFormat = "%s %s already absent"
 	purgeRerunWithForceHint  = "; re-run with --force"
+	purgeRequiresManualMsg   = "%s %s requires manual deletion"
+	purgeBlockedByDepsMsg    = "%s %s is blocked by dependent resources"
+	fmtDeleteResourceErr     = "delete %s %s: %v"
 )
 
 // purgeManualError wraps errors that require operator intervention — the
@@ -56,6 +59,32 @@ func (e *purgeManualError) Error() string {
 
 func (e *purgeManualError) Unwrap() error { return e.cause }
 
+type purgeDeleteCounts struct {
+	deleted, gone, manual, blocked int
+	errs                           []string
+}
+
+func recordPurgeDeleteResult(out *commandOutput, resource auditResource, err error, counts *purgeDeleteCounts, force bool) {
+	switch classifyPurgeDeleteError(err) {
+	case purgeFailureGone:
+		counts.gone++
+		out.Status("muted", "skip", fmt.Sprintf(purgeAlreadyAbsentFormat, resource.resourceType, resource.name))
+	case purgeFailureManual:
+		counts.manual++
+		out.Status("warn", "skip", fmt.Sprintf(purgeRequiresManualMsg, resource.resourceType, resource.name))
+	case purgeFailureBlocked:
+		counts.blocked++
+		detail := fmt.Sprintf(purgeBlockedByDepsMsg, resource.resourceType, resource.name)
+		if !force {
+			detail += purgeRerunWithForceHint
+		}
+		out.Status("warn", "wait", detail)
+	default:
+		counts.errs = append(counts.errs, fmt.Sprintf(fmtResourceNameErr, resource.resourceType, resource.name, err))
+		out.Status("error", "fail", fmt.Sprintf(fmtDeleteResourceErr, resource.resourceType, resource.name, err))
+	}
+}
+
 var (
 	newCloudControlClient = func(cfg sdkaws.Config) cloudControlAPI {
 		return cloudcontrol.NewFromConfig(cfg)
@@ -63,6 +92,64 @@ var (
 	purgeStdout io.Writer = os.Stdout
 	purgeForce  bool
 )
+
+func iamToCloudControl(resourceType, name, arn string) (string, string) {
+	switch resourceType {
+	case "iam/role":
+		return "AWS::IAM::Role", name
+	case "iam/policy":
+		return "AWS::IAM::ManagedPolicy", arn
+	case "iam/user":
+		return "AWS::IAM::User", name
+	case "iam/group":
+		return "AWS::IAM::Group", name
+	}
+	return "", ""
+}
+
+func ec2ToCloudControl(resourceType, name string) (string, string) {
+	switch resourceType {
+	case "ec2/internet-gateway":
+		return "AWS::EC2::InternetGateway", name
+	case "ec2/route-table":
+		return "AWS::EC2::RouteTable", name
+	case "ec2/subnet":
+		return "AWS::EC2::Subnet", name
+	case "ec2/vpc":
+		return "AWS::EC2::VPC", name
+	case "ec2/security-group":
+		return "AWS::EC2::SecurityGroup", name
+	}
+	return "", ""
+}
+
+func ecsToCloudControl(resourceType, name, arn string) (string, string) {
+	switch resourceType {
+	case "ecs/cluster":
+		return "AWS::ECS::Cluster", name
+	case "ecs/service":
+		return "AWS::ECS::Service", arn
+	case "ecs/task-definition":
+		return "AWS::ECS::TaskDefinition", arn
+	}
+	return "", ""
+}
+
+func lightsailToCloudControl(resourceType, name string) (string, string) {
+	switch resourceType {
+	case "lightsail/StaticIp":
+		return "AWS::Lightsail::StaticIp", name
+	case "lightsail/KeyPair":
+		return "AWS::Lightsail::KeyPair", name
+	case "lightsail/Instance":
+		return "AWS::Lightsail::Instance", name
+	case "lightsail/Disk":
+		return "AWS::Lightsail::Disk", name
+	case "lightsail/Bucket":
+		return "AWS::Lightsail::Bucket", name
+	}
+	return "", ""
+}
 
 // arnToCloudControl maps a parsed ARN (service, resourceType, name) to the
 // CloudFormation type name and primary identifier expected by Cloud Control API.
@@ -79,16 +166,7 @@ func arnToCloudControl(arn, service, resourceType, name string) (cfnType, identi
 	case "sqs":
 		return "AWS::SQS::Queue", arn
 	case "iam":
-		switch resourceType {
-		case "iam/role":
-			return "AWS::IAM::Role", name
-		case "iam/policy":
-			return "AWS::IAM::ManagedPolicy", arn
-		case "iam/user":
-			return "AWS::IAM::User", name
-		case "iam/group":
-			return "AWS::IAM::Group", name
-		}
+		return iamToCloudControl(resourceType, name, arn)
 	case "lambda":
 		if resourceType == "lambda/function" {
 			return "AWS::Lambda::Function", name
@@ -118,27 +196,9 @@ func arnToCloudControl(arn, service, resourceType, name string) (cfnType, identi
 			return "AWS::ElasticLoadBalancingV2::LoadBalancer", arn
 		}
 	case "ecs":
-		switch resourceType {
-		case "ecs/cluster":
-			return "AWS::ECS::Cluster", name
-		case "ecs/service":
-			return "AWS::ECS::Service", arn
-		case "ecs/task-definition":
-			return "AWS::ECS::TaskDefinition", arn
-		}
+		return ecsToCloudControl(resourceType, name, arn)
 	case "ec2":
-		switch resourceType {
-		case "ec2/internet-gateway":
-			return "AWS::EC2::InternetGateway", name
-		case "ec2/route-table":
-			return "AWS::EC2::RouteTable", name
-		case "ec2/subnet":
-			return "AWS::EC2::Subnet", name
-		case "ec2/vpc":
-			return "AWS::EC2::VPC", name
-		case "ec2/security-group":
-			return "AWS::EC2::SecurityGroup", name
-		}
+		return ec2ToCloudControl(resourceType, name)
 	case "events":
 		if resourceType == "events/rule" {
 			return "AWS::Events::Rule", name
@@ -152,18 +212,7 @@ func arnToCloudControl(arn, service, resourceType, name string) (cfnType, identi
 			return "AWS::ServiceDiscovery::PrivateDnsNamespace", name
 		}
 	case "lightsail":
-		switch resourceType {
-		case "lightsail/StaticIp":
-			return "AWS::Lightsail::StaticIp", name
-		case "lightsail/KeyPair":
-			return "AWS::Lightsail::KeyPair", name
-		case "lightsail/Instance":
-			return "AWS::Lightsail::Instance", name
-		case "lightsail/Disk":
-			return "AWS::Lightsail::Disk", name
-		case "lightsail/Bucket":
-			return "AWS::Lightsail::Bucket", name
-		}
+		return lightsailToCloudControl(resourceType, name)
 	}
 	return "", ""
 }
@@ -363,109 +412,49 @@ code required. Unsupported resource types are listed but skipped.
 		out.Blank()
 
 		cc := newCloudControlClient(d.awsCfg)
-		var deleteErrs []string
-		deleted := 0
-		gone := 0
-		manual := 0
-		blocked := 0
+		var counts purgeDeleteCounts
 		for _, t := range targets {
 			out.Status("running", "...", fmt.Sprintf("deleting %s %s", t.resource.resourceType, t.resource.name))
 			if handled, err := deleteResourceNatively(ctx, t.resource, purgeForce); handled {
-				switch classifyPurgeDeleteError(err) {
-				case purgeFailureGone:
-					gone++
-					out.Status("muted", "skip", fmt.Sprintf(purgeAlreadyAbsentFormat, t.resource.resourceType, t.resource.name))
-				case purgeFailureManual:
-					manual++
-					out.Status("warn", "skip", fmt.Sprintf("%s %s requires manual deletion", t.resource.resourceType, t.resource.name))
-				case purgeFailureBlocked:
-					blocked++
-					detail := fmt.Sprintf("%s %s is blocked by dependent resources", t.resource.resourceType, t.resource.name)
-					if !purgeForce {
-						detail += purgeRerunWithForceHint
-					}
-					out.Status("warn", "wait", detail)
-				case purgeFailureFatal:
-					if err != nil {
-						deleteErrs = append(deleteErrs, fmt.Sprintf("%s %s: %v", t.resource.resourceType, t.resource.name, err))
-						out.Status("error", "fail", fmt.Sprintf("delete %s %s: %v", t.resource.resourceType, t.resource.name, err))
-					} else {
-						deleted++
-						out.Status("ok", "ok", fmt.Sprintf("deleted %s %s", t.resource.resourceType, t.resource.name))
-					}
-				case purgeFailureRetryable:
-					deleteErrs = append(deleteErrs, fmt.Sprintf("%s %s: %v", t.resource.resourceType, t.resource.name, err))
-					out.Status("error", "fail", fmt.Sprintf("delete %s %s: %v", t.resource.resourceType, t.resource.name, err))
+				if err == nil {
+					counts.deleted++
+					out.Status("ok", "ok", fmt.Sprintf("deleted %s %s", t.resource.resourceType, t.resource.name))
+				} else {
+					recordPurgeDeleteResult(out, t.resource, err, &counts, purgeForce)
 				}
 				continue
 			}
 			resp, err := deleteResourceWithRetry(ctx, cc, &cloudcontrol.DeleteResourceInput{
-				TypeName:      sdkaws.String(t.cfnType),
-				Identifier:    sdkaws.String(t.identifier),
-				ClientToken:   sdkaws.String(purgeClientToken(t.cfnType, t.identifier)),
-				RoleArn:       nil,
-				TypeVersionId: nil,
+				TypeName:    sdkaws.String(t.cfnType),
+				Identifier:  sdkaws.String(t.identifier),
+				ClientToken: sdkaws.String(purgeClientToken(t.cfnType, t.identifier)),
 			})
 			if err != nil {
-				switch classifyPurgeDeleteError(err) {
-				case purgeFailureGone:
-					gone++
-					out.Status("muted", "skip", fmt.Sprintf(purgeAlreadyAbsentFormat, t.resource.resourceType, t.resource.name))
-				case purgeFailureManual:
-					manual++
-					out.Status("warn", "skip", fmt.Sprintf("%s %s requires manual deletion", t.resource.resourceType, t.resource.name))
-				case purgeFailureBlocked:
-					blocked++
-					detail := fmt.Sprintf("%s %s is blocked by dependent resources", t.resource.resourceType, t.resource.name)
-					if !purgeForce {
-						detail += purgeRerunWithForceHint
-					}
-					out.Status("warn", "wait", detail)
-				default:
-					deleteErrs = append(deleteErrs, fmt.Sprintf("%s %s: %v", t.resource.resourceType, t.resource.name, err))
-					out.Status("error", "fail", fmt.Sprintf("delete %s %s: %v", t.resource.resourceType, t.resource.name, err))
-				}
+				recordPurgeDeleteResult(out, t.resource, err, &counts, purgeForce)
 				continue
 			}
 			if err := waitForDelete(ctx, cc, sdkaws.ToString(resp.ProgressEvent.RequestToken)); err != nil {
-				switch classifyPurgeDeleteError(err) {
-				case purgeFailureGone:
-					gone++
-					out.Status("muted", "skip", fmt.Sprintf(purgeAlreadyAbsentFormat, t.resource.resourceType, t.resource.name))
-				case purgeFailureManual:
-					manual++
-					out.Status("warn", "skip", fmt.Sprintf("%s %s requires manual deletion", t.resource.resourceType, t.resource.name))
-				case purgeFailureBlocked:
-					blocked++
-					detail := fmt.Sprintf("%s %s is blocked by dependent resources", t.resource.resourceType, t.resource.name)
-					if !purgeForce {
-						detail += purgeRerunWithForceHint
-					}
-					out.Status("warn", "wait", detail)
-				default:
-					deleteErrs = append(deleteErrs, fmt.Sprintf("%s %s: %v", t.resource.resourceType, t.resource.name, err))
-					out.Status("error", "fail", fmt.Sprintf("delete %s %s: %v", t.resource.resourceType, t.resource.name, err))
-				}
+				recordPurgeDeleteResult(out, t.resource, err, &counts, purgeForce)
 				continue
 			}
-			deleted++
+			counts.deleted++
 			out.Status("ok", "ok", fmt.Sprintf("deleted %s %s", t.resource.resourceType, t.resource.name))
 		}
 
 		out.Blank()
 		out.Summary(
 			"Summary",
-			countPart("deleted", deleted),
-			countPart("gone", gone),
-			countPart("manual", manual),
-			countPart("blocked", blocked),
-			countPart("failed", len(deleteErrs)),
+			countPart("deleted", counts.deleted),
+			countPart("gone", counts.gone),
+			countPart("manual", counts.manual),
+			countPart("blocked", counts.blocked),
+			countPart("failed", len(counts.errs)),
 		)
-		if len(deleteErrs) > 0 {
-			for _, msg := range deleteErrs {
+		if len(counts.errs) > 0 {
+			for _, msg := range counts.errs {
 				out.Status("error", "fail", msg)
 			}
-			return fmt.Errorf("purge completed with %d deletion failure(s)", len(deleteErrs))
+			return fmt.Errorf("purge completed with %d deletion failure(s)", len(counts.errs))
 		}
 		return nil
 	},

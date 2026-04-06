@@ -11,6 +11,11 @@ import (
 	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
 )
 
+const (
+	testPlatformAdminRoleARN = "arn:aws:iam::123456789012:role/platform-admin"
+	errDeletingAccessKey     = "deleting access key"
+)
+
 type fakeIAMAPI struct {
 	getUserErr          error
 	createUserErr       error
@@ -110,7 +115,7 @@ func TestEnsureTempUserExistsWrapsUnexpectedError(t *testing.T) {
 
 	err := ensureTempUserExists(context.Background(), &fakeIAMAPI{getUserErr: errors.New("boom")})
 	if err == nil || !strings.Contains(err.Error(), "checking temp user: boom") {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 }
 
@@ -134,7 +139,7 @@ func TestEnsureTempUserExistsWrapsCreateUserError(t *testing.T) {
 		createUserErr: errors.New("create denied"),
 	})
 	if err == nil || !strings.Contains(err.Error(), "creating temp user: create denied") {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 }
 
@@ -145,7 +150,7 @@ func TestDeleteUserAccessKeysIgnoresMissingEntities(t *testing.T) {
 		accessKeys:          []iamtypes.AccessKeyMetadata{{AccessKeyId: sdkaws.String("A")}, {AccessKeyId: sdkaws.String("B")}},
 		deleteAccessKeyErrs: map[string]error{"B": &iamtypes.NoSuchEntityException{}},
 	}
-	if err := deleteUserAccessKeys(context.Background(), client, tempUserName, "deleting access key"); err != nil {
+	if err := deleteUserAccessKeys(context.Background(), client, tempUserName, errDeletingAccessKey); err != nil {
 		t.Fatalf("deleteUserAccessKeys: %v", err)
 	}
 	if len(client.deletedAccessKeys) != 2 {
@@ -156,7 +161,7 @@ func TestDeleteUserAccessKeysIgnoresMissingEntities(t *testing.T) {
 func TestDeleteUserAccessKeysHandlesListNoSuchEntity(t *testing.T) {
 	t.Parallel()
 
-	if err := deleteUserAccessKeys(context.Background(), &fakeIAMAPI{listAccessKeysErr: &iamtypes.NoSuchEntityException{}}, tempUserName, "deleting access key"); err != nil {
+	if err := deleteUserAccessKeys(context.Background(), &fakeIAMAPI{listAccessKeysErr: &iamtypes.NoSuchEntityException{}}, tempUserName, errDeletingAccessKey); err != nil {
 		t.Fatalf("deleteUserAccessKeys: %v", err)
 	}
 }
@@ -167,9 +172,9 @@ func TestDeleteUserAccessKeysWrapsDeleteError(t *testing.T) {
 	err := deleteUserAccessKeys(context.Background(), &fakeIAMAPI{
 		accessKeys:          []iamtypes.AccessKeyMetadata{{AccessKeyId: sdkaws.String("A")}},
 		deleteAccessKeyErrs: map[string]error{"A": errors.New("denied")},
-	}, tempUserName, "deleting access key")
+	}, tempUserName, errDeletingAccessKey)
 	if err == nil || !strings.Contains(err.Error(), "deleting access key: denied") {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 }
 
@@ -180,7 +185,7 @@ func TestCreateTempUserBuildsPolicyAndReturnsCredentials(t *testing.T) {
 		getUserErr:          &iamtypes.NoSuchEntityException{},
 		deleteAccessKeyErrs: map[string]error{},
 	}
-	data, err := createTempUser(context.Background(), client, "arn:aws:iam::123456789012:role/platform-admin")
+	data, err := createTempUser(context.Background(), client, testPlatformAdminRoleARN)
 	if err != nil {
 		t.Fatalf("createTempUser: %v", err)
 	}
@@ -203,9 +208,9 @@ func TestCreateTempUserWrapsPutPolicyError(t *testing.T) {
 		getUserErr:          &iamtypes.NoSuchEntityException{},
 		deleteAccessKeyErrs: map[string]error{},
 		putUserPolicyErr:    errors.New("policy denied"),
-	}, "arn:aws:iam::123456789012:role/platform-admin")
+	}, testPlatformAdminRoleARN)
 	if err == nil || !strings.Contains(err.Error(), "putting temp user policy: policy denied") {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 }
 
@@ -216,18 +221,18 @@ func TestCreateTempUserWrapsCreateAccessKeyError(t *testing.T) {
 		getUserErr:          &iamtypes.NoSuchEntityException{},
 		deleteAccessKeyErrs: map[string]error{},
 		createAccessKeyErr:  errors.New("access key denied"),
-	}, "arn:aws:iam::123456789012:role/platform-admin")
+	}, testPlatformAdminRoleARN)
 	if err == nil || !strings.Contains(err.Error(), "creating temp user access key: access key denied") {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 }
 
 func TestCreateTempUserReturnsEnsureUserError(t *testing.T) {
 	t.Parallel()
 
-	_, err := createTempUser(context.Background(), &fakeIAMAPI{getUserErr: errors.New("boom")}, "arn:aws:iam::123456789012:role/platform-admin")
+	_, err := createTempUser(context.Background(), &fakeIAMAPI{getUserErr: errors.New("boom")}, testPlatformAdminRoleARN)
 	if err == nil || !strings.Contains(err.Error(), "checking temp user: boom") {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 }
 
@@ -237,9 +242,9 @@ func TestCreateTempUserReturnsDeleteKeyError(t *testing.T) {
 	_, err := createTempUser(context.Background(), &fakeIAMAPI{
 		accessKeys:          []iamtypes.AccessKeyMetadata{{AccessKeyId: sdkaws.String("A")}},
 		deleteAccessKeyErrs: map[string]error{"A": errors.New("key denied")},
-	}, "arn:aws:iam::123456789012:role/platform-admin")
+	}, testPlatformAdminRoleARN)
 	if err == nil || !strings.Contains(err.Error(), "deleting orphaned key: key denied") {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 }
 
@@ -269,7 +274,7 @@ func TestDeleteTempUserWrapsPolicyDeleteError(t *testing.T) {
 		deleteUserPolicyErr: errors.New("policy denied"),
 	}, tempUserData{userName: tempUserName})
 	if err == nil || !strings.Contains(err.Error(), "deleting temp user policy: policy denied") {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 }
 
@@ -281,7 +286,7 @@ func TestDeleteTempUserWrapsDeleteUserError(t *testing.T) {
 		deleteUserErr:       errors.New("delete denied"),
 	}, tempUserData{userName: tempUserName})
 	if err == nil || !strings.Contains(err.Error(), "deleting temp user: delete denied") {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 }
 
@@ -293,7 +298,7 @@ func TestDeleteTempUserWrapsDeleteAccessKeyError(t *testing.T) {
 		deleteAccessKeyErrs: map[string]error{"A": errors.New("key denied")},
 	}, tempUserData{userName: tempUserName})
 	if err == nil || !strings.Contains(err.Error(), "deleting access key: key denied") {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 }
 
