@@ -9,6 +9,8 @@ import (
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print build information",
+	// version is a local command — it does not need AWS credentials.
+	Annotations: map[string]string{localCommandAnnotation: "true"},
 	Run: func(cmd *cobra.Command, _ []string) {
 		out := newCommandOutput(cmd, d.ui)
 

@@ -191,7 +191,7 @@ func terraformPlanJSON(ctx context.Context) ([]byte, error) {
 		return nil, fmt.Errorf("terraform init: %w", err)
 	}
 
-	planFile, err := os.CreateTemp("/tmp", "platform-org-audit-*.tfplan")
+	planFile, err := os.CreateTemp("", "platform-org-audit-*.tfplan")
 	if err != nil {
 		return nil, fmt.Errorf("create plan file: %w", err)
 	}

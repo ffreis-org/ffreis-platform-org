@@ -60,9 +60,16 @@ resource "aws_iam_role_policy" "activate_lambda" {
         Resource = "*"
       },
       {
-        Sid    = "Logs"
+        Sid      = "LogsCreateGroup"
+        Effect   = "Allow"
+        Action   = "logs:CreateLogGroup"
+        # AWS does not support resource-level restrictions for CreateLogGroup.
+        Resource = "*"
+      },
+      {
+        Sid    = "LogsWrite"
         Effect = "Allow"
-        Action = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
+        Action = ["logs:CreateLogStream", "logs:PutLogEvents"]
         # Scoped to Lambda log group pattern to follow least-privilege.
         Resource = "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${var.org}-activate-cost-tags:*"
       },

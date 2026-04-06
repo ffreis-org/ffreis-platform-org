@@ -81,6 +81,10 @@ func (c rawCreds) toEnv() map[string]string {
 	}
 }
 
+// localCommandAnnotation is the annotation key used to mark commands that
+// do not require AWS credentials so PersistentPreRunE can skip role assumption.
+const localCommandAnnotation = "local"
+
 var rootCmd = &cobra.Command{
 	Use:           "platform-org",
 	Short:         "Manage the platform organization Terraform stack",
@@ -98,6 +102,12 @@ var rootCmd = &cobra.Command{
 		cmd.SetContext(ctx)
 
 		d.log = newLogger(d.logLevel)
+
+		// Skip AWS credential loading for local commands (e.g. version) so
+		// they work without any AWS configuration.
+		if cmd.Annotations[localCommandAnnotation] == "true" {
+			return nil
+		}
 
 		awsCfg, err := loadAWSConfigFn(ctx, d.profile, d.region)
 		if err != nil {
