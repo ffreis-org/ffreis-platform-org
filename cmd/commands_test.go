@@ -723,7 +723,7 @@ func TestNukeCleanupTargetsToleratesScanError(t *testing.T) {
 	}
 	explicitPlatformOrgCleanupTargetsFn = func(context.Context) ([]auditResource, error) {
 		return []auditResource{
-			{status: "OK", resourceType: "organizations/organization", name: "organization", stack: testPlatformOrgStack},
+			{status: "OK", resourceType: resourceTypeOrganizationsOrganization, name: "organization", stack: testPlatformOrgStack},
 		}, nil
 	}
 

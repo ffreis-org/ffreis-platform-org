@@ -13,6 +13,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/organizations"
 )
 
+const (
+	testOrganizationAccountName = "test-account"
+	testOrganizationEnvOUID     = "ou-0001-abc12345"
+	testOrganizationsListRoots  = "AWSOrganizationsV20161128.ListRoots"
+)
+
 func testOrganizationsClient(t *testing.T, handler http.HandlerFunc) *organizations.Client {
 	t.Helper()
 	server := httptest.NewServer(handler)
@@ -55,10 +61,10 @@ func TestFindOrganizationalUnitIDByNameFound(t *testing.T) {
 		call++
 		target := r.Header.Get("X-Amz-Target")
 		switch {
-		case target == "AWSOrganizationsV20161128.ListRoots":
+		case target == testOrganizationsListRoots:
 			_, _ = io.WriteString(w, `{"Roots":[{"Id":"r-0001","Name":"Root","Arn":"arn:aws:organizations::123:root/o-abc/r-0001"}]}`)
 		case target == "AWSOrganizationsV20161128.ListOrganizationalUnitsForParent":
-			_, _ = io.WriteString(w, `{"OrganizationalUnits":[{"Id":"ou-0001-abc12345","Name":"environments","Arn":"arn:..."}]}`)
+			_, _ = io.WriteString(w, `{"OrganizationalUnits":[{"Id":"`+testOrganizationEnvOUID+`","Name":"environments","Arn":"arn:..."}]}`)
 		default:
 			w.WriteHeader(http.StatusBadRequest)
 		}
@@ -67,8 +73,8 @@ func TestFindOrganizationalUnitIDByNameFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if id != "ou-0001-abc12345" {
-		t.Fatalf("expected ou-0001-abc12345, got %q", id)
+	if id != testOrganizationEnvOUID {
+		t.Fatalf("expected %s, got %q", testOrganizationEnvOUID, id)
 	}
 }
 
@@ -77,7 +83,7 @@ func TestFindOrganizationalUnitIDByNameNotFound(t *testing.T) {
 		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
 		target := r.Header.Get("X-Amz-Target")
 		switch {
-		case target == "AWSOrganizationsV20161128.ListRoots":
+		case target == testOrganizationsListRoots:
 			_, _ = io.WriteString(w, `{"Roots":[{"Id":"r-0001","Name":"Root","Arn":"arn:..."}]}`)
 		case target == "AWSOrganizationsV20161128.ListOrganizationalUnitsForParent":
 			_, _ = io.WriteString(w, `{"OrganizationalUnits":[{"Id":"ou-0001-xyz","Name":"other"}]}`)
@@ -100,14 +106,14 @@ func TestFindOrganizationalUnitIDByNamePaginated(t *testing.T) {
 		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
 		target := r.Header.Get("X-Amz-Target")
 		switch {
-		case target == "AWSOrganizationsV20161128.ListRoots":
+		case target == testOrganizationsListRoots:
 			_, _ = io.WriteString(w, `{"Roots":[{"Id":"r-0001","Name":"Root","Arn":"arn:..."}]}`)
 		case target == "AWSOrganizationsV20161128.ListOrganizationalUnitsForParent":
 			listCalls++
 			if listCalls == 1 {
 				_, _ = io.WriteString(w, `{"OrganizationalUnits":[{"Id":"ou-first","Name":"other"}],"NextToken":"page2"}`)
 			} else {
-				_, _ = io.WriteString(w, `{"OrganizationalUnits":[{"Id":"ou-0001-abc12345","Name":"environments"}]}`)
+				_, _ = io.WriteString(w, `{"OrganizationalUnits":[{"Id":"`+testOrganizationEnvOUID+`","Name":"environments"}]}`)
 			}
 		default:
 			w.WriteHeader(http.StatusBadRequest)
@@ -117,8 +123,8 @@ func TestFindOrganizationalUnitIDByNamePaginated(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if id != "ou-0001-abc12345" {
-		t.Fatalf("expected ou-0001-abc12345, got %q", id)
+	if id != testOrganizationEnvOUID {
+		t.Fatalf("expected %s, got %q", testOrganizationEnvOUID, id)
 	}
 	if listCalls != 2 {
 		t.Fatalf("expected 2 list calls, got %d", listCalls)
@@ -130,9 +136,9 @@ func TestFindOrganizationalUnitIDByNamePaginated(t *testing.T) {
 func TestFindOrganizationAccountIDByNameFound(t *testing.T) {
 	client := testOrganizationsClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
-		_, _ = io.WriteString(w, `{"Accounts":[{"Id":"111122223333","Name":"test-account","Status":"ACTIVE"}]}`)
+		_, _ = io.WriteString(w, `{"Accounts":[{"Id":"111122223333","Name":"`+testOrganizationAccountName+`","Status":"ACTIVE"}]}`)
 	})
-	id, err := findOrganizationAccountIDByName(context.Background(), client, "test-account")
+	id, err := findOrganizationAccountIDByName(context.Background(), client, testOrganizationAccountName)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -146,7 +152,7 @@ func TestFindOrganizationAccountIDByNameNotFound(t *testing.T) {
 		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
 		_, _ = io.WriteString(w, `{"Accounts":[{"Id":"111122223333","Name":"other-account","Status":"ACTIVE"}]}`)
 	})
-	id, err := findOrganizationAccountIDByName(context.Background(), client, "test-account")
+	id, err := findOrganizationAccountIDByName(context.Background(), client, testOrganizationAccountName)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -161,7 +167,7 @@ func TestFindOrganizationAccountIDByNameError(t *testing.T) {
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = io.WriteString(w, `{"__type":"ServiceException","message":"internal error"}`)
 	})
-	_, err := findOrganizationAccountIDByName(context.Background(), client, "test-account")
+	_, err := findOrganizationAccountIDByName(context.Background(), client, testOrganizationAccountName)
 	if err == nil {
 		t.Fatal("expected error from ListAccounts failure")
 	}
@@ -175,10 +181,10 @@ func TestFindOrganizationTargetIDByNameEnvironmentsOU(t *testing.T) {
 		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
 		target := r.Header.Get("X-Amz-Target")
 		switch {
-		case target == "AWSOrganizationsV20161128.ListRoots":
+		case target == testOrganizationsListRoots:
 			_, _ = io.WriteString(w, `{"Roots":[{"Id":"r-0001","Name":"Root","Arn":"arn:..."}]}`)
 		case target == "AWSOrganizationsV20161128.ListOrganizationalUnitsForParent":
-			_, _ = io.WriteString(w, `{"OrganizationalUnits":[{"Id":"ou-0001-abc12345","Name":"environments"}]}`)
+			_, _ = io.WriteString(w, `{"OrganizationalUnits":[{"Id":"`+testOrganizationEnvOUID+`","Name":"environments"}]}`)
 		default:
 			w.WriteHeader(http.StatusBadRequest)
 		}
@@ -187,8 +193,8 @@ func TestFindOrganizationTargetIDByNameEnvironmentsOU(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if id != "ou-0001-abc12345" {
-		t.Fatalf("expected ou-0001-abc12345, got %q", id)
+	if id != testOrganizationEnvOUID {
+		t.Fatalf("expected %s, got %q", testOrganizationEnvOUID, id)
 	}
 }
 
@@ -302,7 +308,7 @@ func TestDeleteOrganizationOUByNameNotFound(t *testing.T) {
 		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
 		target := r.Header.Get("X-Amz-Target")
 		switch {
-		case target == "AWSOrganizationsV20161128.ListRoots":
+		case target == testOrganizationsListRoots:
 			_, _ = io.WriteString(w, `{"Roots":[{"Id":"r-0001","Name":"Root","Arn":"arn:..."}]}`)
 		case target == "AWSOrganizationsV20161128.ListOrganizationalUnitsForParent":
 			_, _ = io.WriteString(w, `{"OrganizationalUnits":[]}`)
@@ -320,10 +326,10 @@ func TestDeleteOrganizationOUByNameSuccess(t *testing.T) {
 		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeAMZJSON11)
 		target := r.Header.Get("X-Amz-Target")
 		switch {
-		case target == "AWSOrganizationsV20161128.ListRoots":
+		case target == testOrganizationsListRoots:
 			_, _ = io.WriteString(w, `{"Roots":[{"Id":"r-0001","Name":"Root","Arn":"arn:..."}]}`)
 		case target == "AWSOrganizationsV20161128.ListOrganizationalUnitsForParent":
-			_, _ = io.WriteString(w, `{"OrganizationalUnits":[{"Id":"ou-0001-abc12345","Name":"environments"}]}`)
+			_, _ = io.WriteString(w, `{"OrganizationalUnits":[{"Id":"`+testOrganizationEnvOUID+`","Name":"environments"}]}`)
 		case target == "AWSOrganizationsV20161128.DeleteOrganizationalUnit":
 			_, _ = io.WriteString(w, `{}`)
 		default:

@@ -17,6 +17,13 @@ import (
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
+const (
+	testNukeBackupBucketName           = "my-bucket"
+	testNukeBackupTableName            = "my-table"
+	testNukeBackupTableFile            = "table.json"
+	testNukeBackupFileNotCreatedErrorf = "file not created: %v"
+)
+
 // --- mock types ---
 
 type mockNukeBackupS3 struct {
@@ -88,7 +95,7 @@ func TestCountBucketVersionsHeadBucketError(t *testing.T) {
 			return nil, errors.New("access denied")
 		},
 	}
-	plan := runtimeStateBackupPlan{BucketName: "my-bucket"}
+	plan := runtimeStateBackupPlan{BucketName: testNukeBackupBucketName}
 	if err := countBucketVersions(context.Background(), mock, &plan); err == nil {
 		t.Fatal("expected error for HeadBucket failure")
 	}
@@ -114,7 +121,7 @@ func TestCountBucketVersionsCountsVersionsAndMarkers(t *testing.T) {
 			}, nil
 		},
 	}
-	plan := runtimeStateBackupPlan{BucketName: "my-bucket"}
+	plan := runtimeStateBackupPlan{BucketName: testNukeBackupBucketName}
 	if err := countBucketVersions(context.Background(), mock, &plan); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -136,7 +143,7 @@ func TestCountBucketVersionsListError(t *testing.T) {
 			return nil, errors.New("list failed")
 		},
 	}
-	plan := runtimeStateBackupPlan{BucketName: "my-bucket"}
+	plan := runtimeStateBackupPlan{BucketName: testNukeBackupBucketName}
 	if err := countBucketVersions(context.Background(), mock, &plan); err == nil {
 		t.Fatal("expected error from ListObjectVersions failure")
 	}
@@ -167,7 +174,7 @@ func TestCountBucketVersionsPaginates(t *testing.T) {
 			}, nil
 		},
 	}
-	plan := runtimeStateBackupPlan{BucketName: "my-bucket"}
+	plan := runtimeStateBackupPlan{BucketName: testNukeBackupBucketName}
 	if err := countBucketVersions(context.Background(), mock, &plan); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -361,12 +368,12 @@ func TestDownloadBucketVersionSuccessCreatesFile(t *testing.T) {
 			}, nil
 		},
 	}
-	if err := downloadBucketVersion(context.Background(), mock, "my-bucket", "state.tfstate", "v1", target); err != nil {
+	if err := downloadBucketVersion(context.Background(), mock, testNukeBackupBucketName, "state.tfstate", "v1", target); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	data, err := os.ReadFile(target)
 	if err != nil {
-		t.Fatalf("file not created: %v", err)
+		t.Fatalf(testNukeBackupFileNotCreatedErrorf, err)
 	}
 	if string(data) != content {
 		t.Fatalf("file content mismatch: got %q, want %q", string(data), content)
@@ -382,7 +389,7 @@ func TestDownloadBucketVersionGetObjectError(t *testing.T) {
 			return nil, errors.New("get object failed")
 		},
 	}
-	if err := downloadBucketVersion(context.Background(), mock, "my-bucket", "key", "v1", target); err == nil {
+	if err := downloadBucketVersion(context.Background(), mock, testNukeBackupBucketName, "key", "v1", target); err == nil {
 		t.Fatal("expected error from GetObject failure")
 	}
 }
@@ -397,7 +404,7 @@ func TestBackupBucketVersionsListError(t *testing.T) {
 			return nil, errors.New("list failed")
 		},
 	}
-	_, err := backupBucketVersions(context.Background(), mock, "my-bucket", dir)
+	_, err := backupBucketVersions(context.Background(), mock, testNukeBackupBucketName, dir)
 	if err == nil {
 		t.Fatal("expected error from list failure")
 	}
@@ -421,7 +428,7 @@ func TestBackupBucketVersionsDownloadsVersionsAndReturnsMetadata(t *testing.T) {
 			}, nil
 		},
 	}
-	metadata, err := backupBucketVersions(context.Background(), mock, "my-bucket", dir)
+	metadata, err := backupBucketVersions(context.Background(), mock, testNukeBackupBucketName, dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -453,7 +460,7 @@ func TestBackupBucketVersionsGetObjectError(t *testing.T) {
 			return nil, errors.New("get object failed")
 		},
 	}
-	_, err := backupBucketVersions(context.Background(), mock, "my-bucket", dir)
+	_, err := backupBucketVersions(context.Background(), mock, testNukeBackupBucketName, dir)
 	if err == nil {
 		t.Fatal("expected error from GetObject failure")
 	}
@@ -485,7 +492,7 @@ func TestBackupBucketVersionsPaginates(t *testing.T) {
 			}, nil
 		},
 	}
-	metadata, err := backupBucketVersions(context.Background(), mock, "my-bucket", dir)
+	metadata, err := backupBucketVersions(context.Background(), mock, testNukeBackupBucketName, dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -518,7 +525,7 @@ func TestBackupBucketVersionsIncludesDeleteMarkers(t *testing.T) {
 			}, nil
 		},
 	}
-	metadata, err := backupBucketVersions(context.Background(), mock, "my-bucket", dir)
+	metadata, err := backupBucketVersions(context.Background(), mock, testNukeBackupBucketName, dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -536,13 +543,13 @@ func TestBackupBucketVersionsIncludesDeleteMarkers(t *testing.T) {
 func TestBackupDynamoTableScanError(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	target := filepath.Join(dir, "table.json")
+	target := filepath.Join(dir, testNukeBackupTableFile)
 	mock := &mockNukeBackupDynamo{
 		scanFn: func(_ context.Context, _ *dynamodb.ScanInput, _ ...func(*dynamodb.Options)) (*dynamodb.ScanOutput, error) {
 			return nil, errors.New("scan failed")
 		},
 	}
-	if err := backupDynamoTable(context.Background(), mock, "my-table", target); err == nil {
+	if err := backupDynamoTable(context.Background(), mock, testNukeBackupTableName, target); err == nil {
 		t.Fatal("expected error from Scan failure")
 	}
 }
@@ -550,7 +557,7 @@ func TestBackupDynamoTableScanError(t *testing.T) {
 func TestBackupDynamoTableWritesItems(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	target := filepath.Join(dir, "table.json")
+	target := filepath.Join(dir, testNukeBackupTableFile)
 	mock := &mockNukeBackupDynamo{
 		scanFn: func(_ context.Context, _ *dynamodb.ScanInput, _ ...func(*dynamodb.Options)) (*dynamodb.ScanOutput, error) {
 			return &dynamodb.ScanOutput{
@@ -561,12 +568,12 @@ func TestBackupDynamoTableWritesItems(t *testing.T) {
 			}, nil
 		},
 	}
-	if err := backupDynamoTable(context.Background(), mock, "my-table", target); err != nil {
+	if err := backupDynamoTable(context.Background(), mock, testNukeBackupTableName, target); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	data, err := os.ReadFile(target)
 	if err != nil {
-		t.Fatalf("file not created: %v", err)
+		t.Fatalf(testNukeBackupFileNotCreatedErrorf, err)
 	}
 	content := string(data)
 	if !strings.Contains(content, "lock-id-1") || !strings.Contains(content, "lock-id-2") {
@@ -577,7 +584,7 @@ func TestBackupDynamoTableWritesItems(t *testing.T) {
 func TestBackupDynamoTablePaginates(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	target := filepath.Join(dir, "table.json")
+	target := filepath.Join(dir, testNukeBackupTableFile)
 	calls := 0
 	pageKey := map[string]dbtypes.AttributeValue{
 		"LockID": &dbtypes.AttributeValueMemberS{Value: "page-key"},
@@ -600,7 +607,7 @@ func TestBackupDynamoTablePaginates(t *testing.T) {
 			}, nil
 		},
 	}
-	if err := backupDynamoTable(context.Background(), mock, "my-table", target); err != nil {
+	if err := backupDynamoTable(context.Background(), mock, testNukeBackupTableName, target); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if calls != 2 {
@@ -608,7 +615,7 @@ func TestBackupDynamoTablePaginates(t *testing.T) {
 	}
 	data, err := os.ReadFile(target)
 	if err != nil {
-		t.Fatalf("file not created: %v", err)
+		t.Fatalf(testNukeBackupFileNotCreatedErrorf, err)
 	}
 	content := string(data)
 	if !strings.Contains(content, "page1-item") || !strings.Contains(content, "page2-item") {

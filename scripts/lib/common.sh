@@ -19,6 +19,7 @@ common_info() {
 common_die() {
   common_err "$@"
   exit 1
+  return 1
 }
 
 common_require_git_repo() {

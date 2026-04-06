@@ -129,7 +129,7 @@ var nativeDeleteHandlers = map[string]nativeResourceDeleteFn{
 	"organizations/organizational-unit": func(ctx context.Context, resource auditResource, _ bool) (bool, error) {
 		return true, deleteOrganizationOUByName(ctx, resource.name)
 	},
-	"organizations/organization": func(ctx context.Context, _ auditResource, _ bool) (bool, error) {
+	resourceTypeOrganizationsOrganization: func(ctx context.Context, _ auditResource, _ bool) (bool, error) {
 		client := newOrganizationsClient(d.awsCfg)
 		_, err := client.DeleteOrganization(ctx, &organizations.DeleteOrganizationInput{})
 		return true, err

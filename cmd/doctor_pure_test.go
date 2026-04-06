@@ -11,6 +11,18 @@ import (
 	schedulertypes "github.com/aws/aws-sdk-go-v2/service/scheduler/types"
 )
 
+const (
+	testDoctorBucketName         = "my-bucket"
+	testDoctorBucketBAddress     = "aws_s3_bucket.b"
+	testDoctorExistingBucketName = "existing-bucket"
+	testDoctorExistingBucketARN  = "arn:aws:s3:::" + testDoctorExistingBucketName
+	testDoctorNotExistsStrict    = "not exists strict"
+	testDoctorBlockingErrorf     = "Blocking=%v want %v"
+	testDoctorLambdaARN          = "arn:aws:lambda:us-east-1:123:function:myorg-activate-cost-tags"
+	testDoctorPlatformEventsARN  = "arn:aws:sns:us-east-1:123:myorg-platform-events"
+	testDoctorStatusDetailErrorf = "Status=%q want %q (detail=%s)"
+)
+
 // ---------------------------------------------------------------------------
 // checkBackendLocalFile
 // ---------------------------------------------------------------------------
@@ -62,7 +74,7 @@ func TestDoctorCheckBackendLocalFile(t *testing.T) {
 				t.Errorf("Status=%q want %q", got.Status, tc.wantStat)
 			}
 			if got.Blocking != tc.blocking {
-				t.Errorf("Blocking=%v want %v", got.Blocking, tc.blocking)
+				t.Errorf(testDoctorBlockingErrorf, got.Blocking, tc.blocking)
 			}
 			if tc.localErr != nil && got.Detail != tc.localErr.Error() {
 				t.Errorf("Detail=%q want error message", got.Detail)
@@ -116,7 +128,7 @@ func TestDoctorCheckBackendEnvFile(t *testing.T) {
 				t.Errorf("Status=%q want %q", got.Status, tc.wantStat)
 			}
 			if got.Blocking != tc.blocking {
-				t.Errorf("Blocking=%v want %v", got.Blocking, tc.blocking)
+				t.Errorf(testDoctorBlockingErrorf, got.Blocking, tc.blocking)
 			}
 		})
 	}
@@ -148,7 +160,7 @@ func TestDoctorCheckBackendStateObject(t *testing.T) {
 				t.Errorf("Status=%q want %q", got.Status, tc.wantStat)
 			}
 			if got.Blocking != tc.blocking {
-				t.Errorf("Blocking=%v want %v", got.Blocking, tc.blocking)
+				t.Errorf(testDoctorBlockingErrorf, got.Blocking, tc.blocking)
 			}
 		})
 	}
@@ -182,7 +194,7 @@ func TestDoctorCheckBackendLockRows(t *testing.T) {
 				t.Errorf("Status=%q want %q", got.Status, tc.wantStat)
 			}
 			if got.Blocking != tc.blocking {
-				t.Errorf("Blocking=%v want %v", got.Blocking, tc.blocking)
+				t.Errorf(testDoctorBlockingErrorf, got.Blocking, tc.blocking)
 			}
 		})
 	}
@@ -204,7 +216,7 @@ func perfectSchedule(org, lambdaARN, roleARN string) *activationScheduleDetails 
 
 func TestDoctorCheckRuntimeActivationSchedule(t *testing.T) {
 	org := "myorg"
-	lambdaARN := "arn:aws:lambda:us-east-1:123:function:myorg-activate-cost-tags"
+	lambdaARN := testDoctorLambdaARN
 	roleARN := "arn:aws:iam::123:role/myorg-scheduler-invoke-activate"
 
 	tests := []struct {
@@ -265,10 +277,10 @@ func TestDoctorCheckRuntimeActivationSchedule(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got := checkRuntimeActivationSchedule(tc.schedule, org, lambdaARN, roleARN)
 			if got.Status != tc.wantStat {
-				t.Errorf("Status=%q want %q (detail=%s)", got.Status, tc.wantStat, got.Detail)
+				t.Errorf(testDoctorStatusDetailErrorf, got.Status, tc.wantStat, got.Detail)
 			}
 			if got.Blocking != tc.blocking {
-				t.Errorf("Blocking=%v want %v", got.Blocking, tc.blocking)
+				t.Errorf(testDoctorBlockingErrorf, got.Blocking, tc.blocking)
 			}
 		})
 	}
@@ -279,7 +291,7 @@ func TestDoctorCheckRuntimeActivationSchedule(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDoctorCheckRuntimeSchedulerRolePolicy(t *testing.T) {
-	lambdaARN := "arn:aws:lambda:us-east-1:123:function:myorg-activate-cost-tags"
+	lambdaARN := testDoctorLambdaARN
 	modeAllowMissing := platformOrgDoctorMode{AllowMissingRuntime: true}
 	modeStrict := platformOrgDoctorMode{AllowMissingRuntime: false}
 
@@ -294,7 +306,7 @@ func TestDoctorCheckRuntimeSchedulerRolePolicy(t *testing.T) {
 	}{
 		{"error", "", false, errors.New("iam error"), modeAllowMissing, "fail", true},
 		{"not exists allow missing", "", false, nil, modeAllowMissing, "info", false},
-		{"not exists strict", "", false, nil, modeStrict, "fail", true},
+		{testDoctorNotExistsStrict, "", false, nil, modeStrict, "fail", true},
 		{"exists contains ARN", `{"Resource":"` + lambdaARN + `"}`, true, nil, modeAllowMissing, "ok", false},
 		{"exists missing ARN", `{"Resource":"arn:aws:lambda:us-east-1:123:function:other"}`, true, nil, modeAllowMissing, "fail", true},
 	}
@@ -302,10 +314,10 @@ func TestDoctorCheckRuntimeSchedulerRolePolicy(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got := checkRuntimeSchedulerRolePolicy(tc.doc, tc.exists, tc.err, tc.mode, "myorg-scheduler-invoke-activate", lambdaARN)
 			if got.Status != tc.wantStat {
-				t.Errorf("Status=%q want %q (detail=%s)", got.Status, tc.wantStat, got.Detail)
+				t.Errorf(testDoctorStatusDetailErrorf, got.Status, tc.wantStat, got.Detail)
 			}
 			if got.Blocking != tc.blocking {
-				t.Errorf("Blocking=%v want %v", got.Blocking, tc.blocking)
+				t.Errorf(testDoctorBlockingErrorf, got.Blocking, tc.blocking)
 			}
 		})
 	}
@@ -316,7 +328,7 @@ func TestDoctorCheckRuntimeSchedulerRolePolicy(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDoctorCheckRuntimeLambdaRolePolicy(t *testing.T) {
-	topicARN := "arn:aws:sns:us-east-1:123:myorg-platform-events"
+	topicARN := testDoctorPlatformEventsARN
 	logPattern := "arn:aws:logs:us-east-1:123:log-group:/aws/lambda/myorg-activate-cost-tags:*"
 	modeAllowMissing := platformOrgDoctorMode{AllowMissingRuntime: true}
 	modeStrict := platformOrgDoctorMode{AllowMissingRuntime: false}
@@ -336,7 +348,7 @@ func TestDoctorCheckRuntimeLambdaRolePolicy(t *testing.T) {
 	}{
 		{"error", "", false, errors.New("iam error"), modeAllowMissing, "fail", true},
 		{"not exists allow missing", "", false, nil, modeAllowMissing, "info", false},
-		{"not exists strict", "", false, nil, modeStrict, "fail", true},
+		{testDoctorNotExistsStrict, "", false, nil, modeStrict, "fail", true},
 		{"exists with both", docBoth, true, nil, modeAllowMissing, "ok", false},
 		{"exists missing log pattern", docMissingLog, true, nil, modeAllowMissing, "fail", true},
 		{"exists missing topic ARN", docMissingTopic, true, nil, modeAllowMissing, "fail", true},
@@ -345,10 +357,10 @@ func TestDoctorCheckRuntimeLambdaRolePolicy(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got := checkRuntimeLambdaRolePolicy(tc.doc, tc.exists, tc.err, tc.mode, "myorg-activate-cost-tags", topicARN, logPattern)
 			if got.Status != tc.wantStat {
-				t.Errorf("Status=%q want %q (detail=%s)", got.Status, tc.wantStat, got.Detail)
+				t.Errorf(testDoctorStatusDetailErrorf, got.Status, tc.wantStat, got.Detail)
 			}
 			if got.Blocking != tc.blocking {
-				t.Errorf("Blocking=%v want %v", got.Blocking, tc.blocking)
+				t.Errorf(testDoctorBlockingErrorf, got.Blocking, tc.blocking)
 			}
 		})
 	}
@@ -369,7 +381,7 @@ func lambdaOutputWithEnv(vars map[string]string) *lambda.GetFunctionOutput {
 }
 
 func TestDoctorCheckRuntimeLambdaEnvironment(t *testing.T) {
-	topicARN := "arn:aws:sns:us-east-1:123:myorg-platform-events"
+	topicARN := testDoctorPlatformEventsARN
 	lambdaName := "myorg-activate-cost-tags"
 
 	tests := []struct {
@@ -432,10 +444,10 @@ func TestDoctorCheckRuntimeLambdaEnvironment(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got := checkRuntimeLambdaEnvironment(tc.out, tc.err, lambdaName, topicARN)
 			if got.Status != tc.wantStat {
-				t.Errorf("Status=%q want %q (detail=%s)", got.Status, tc.wantStat, got.Detail)
+				t.Errorf(testDoctorStatusDetailErrorf, got.Status, tc.wantStat, got.Detail)
 			}
 			if got.Blocking != tc.blocking {
-				t.Errorf("Blocking=%v want %v", got.Blocking, tc.blocking)
+				t.Errorf(testDoctorBlockingErrorf, got.Blocking, tc.blocking)
 			}
 		})
 	}
@@ -461,7 +473,7 @@ func TestDoctorCheckRuntimeLambdaLogGroup(t *testing.T) {
 		{"error", false, errors.New("logs error"), modeAllowMissing, "fail", true},
 		{"exists", true, nil, modeAllowMissing, "ok", false},
 		{"not exists allow missing", false, nil, modeAllowMissing, "info", false},
-		{"not exists strict", false, nil, modeStrict, "fail", true},
+		{testDoctorNotExistsStrict, false, nil, modeStrict, "fail", true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -470,7 +482,7 @@ func TestDoctorCheckRuntimeLambdaLogGroup(t *testing.T) {
 				t.Errorf("Status=%q want %q", got.Status, tc.wantStat)
 			}
 			if got.Blocking != tc.blocking {
-				t.Errorf("Blocking=%v want %v", got.Blocking, tc.blocking)
+				t.Errorf(testDoctorBlockingErrorf, got.Blocking, tc.blocking)
 			}
 		})
 	}
@@ -515,9 +527,9 @@ func TestDoctorExistsDetail(t *testing.T) {
 		resname string
 		wantSub string
 	}{
-		{"error returns error message", false, errors.New("access denied"), "bucket", "my-bucket", "access denied"},
-		{"not exists returns missing", false, nil, "bucket", "my-bucket", "is missing"},
-		{"exists returns present", true, nil, "bucket", "my-bucket", "is present"},
+		{"error returns error message", false, errors.New("access denied"), "bucket", testDoctorBucketName, "access denied"},
+		{"not exists returns missing", false, nil, "bucket", testDoctorBucketName, "is missing"},
+		{"exists returns present", true, nil, "bucket", testDoctorBucketName, "is present"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -716,133 +728,158 @@ func TestDoctorBuildStateLiveIndex(t *testing.T) {
 // stateDoctorDriftChecks
 // ---------------------------------------------------------------------------
 
+type doctorStateDoctorDriftCheckCase struct {
+	name            string
+	mode            platformOrgDoctorMode
+	expected        []expectedAuditResource
+	stateByAddr     map[string]terraformStateObject
+	liveByARN       map[string]auditResource
+	liveByName      map[string][]auditResource
+	wantCheckCount  int
+	wantFirstKey    string
+	wantFirstStatus string
+	wantAddresses   map[string]bool
+}
+
+func assertDoctorStateDoctorDriftChecksCase(t *testing.T, tc doctorStateDoctorDriftCheckCase) {
+	t.Helper()
+
+	addrs, checks := stateDoctorDriftChecks(tc.mode, tc.expected, tc.stateByAddr, tc.liveByARN, tc.liveByName)
+	if len(checks) != tc.wantCheckCount {
+		t.Fatalf("expected %d check(s), got %d: %v", tc.wantCheckCount, len(checks), checks)
+	}
+	if tc.wantFirstKey != "" && checks[0].Key != tc.wantFirstKey {
+		t.Errorf("unexpected key: %s", checks[0].Key)
+	}
+	if tc.wantFirstStatus != "" && checks[0].Status != tc.wantFirstStatus {
+		t.Errorf("Status=%q want %s", checks[0].Status, tc.wantFirstStatus)
+	}
+	for addr, want := range tc.wantAddresses {
+		if addrs[addr] != want {
+			t.Errorf("address %q presence=%v want %v", addr, addrs[addr], want)
+		}
+	}
+}
+
 func TestDoctorStateDoctorDriftChecks(t *testing.T) {
 	mode := platformOrgDoctorMode{LenientState: false}
 	lenientMode := platformOrgDoctorMode{LenientState: true}
 
 	liveByARN := map[string]auditResource{
-		"arn:aws:s3:::existing-bucket": {arn: "arn:aws:s3:::existing-bucket", name: "existing-bucket"},
+		testDoctorExistingBucketARN: {arn: testDoctorExistingBucketARN, name: testDoctorExistingBucketName},
 	}
 	liveByName := map[string][]auditResource{
-		"existing-bucket": {{arn: "arn:aws:s3:::existing-bucket", name: "existing-bucket"}},
+		testDoctorExistingBucketName: {{arn: testDoctorExistingBucketARN, name: testDoctorExistingBucketName}},
 	}
 	emptyARN := map[string]auditResource{}
 	emptyName := map[string][]auditResource{}
+	liveByNameLocal := map[string][]auditResource{
+		"new-bucket": {{name: "new-bucket"}},
+	}
+	newARN := "arn:aws:s3:::new-bucket"
+	liveByARNLocal := map[string]auditResource{
+		newARN: {arn: newARN, name: "new-bucket"},
+	}
 
-	t.Run("both missing - no check", func(t *testing.T) {
-		expected := []expectedAuditResource{{address: "aws_s3_bucket.missing", status: "OK", name: "missing-bucket"}}
-		stateByAddr := map[string]terraformStateObject{}
-		_, checks := stateDoctorDriftChecks(mode, expected, stateByAddr, emptyARN, emptyName)
-		if len(checks) != 0 {
-			t.Errorf("expected no checks, got %d: %v", len(checks), checks)
-		}
-	})
+	testCases := []doctorStateDoctorDriftCheckCase{
+		{
+			name:           "both missing - no check",
+			mode:           mode,
+			expected:       []expectedAuditResource{{address: "aws_s3_bucket.missing", status: "OK", name: "missing-bucket"}},
+			stateByAddr:    map[string]terraformStateObject{},
+			liveByARN:      emptyARN,
+			liveByName:     emptyName,
+			wantCheckCount: 0,
+		},
+		{
+			name: "not in state, live present, status MISSING -> outside-state check",
+			mode: mode,
+			expected: []expectedAuditResource{{
+				address: "aws_s3_bucket.mybucket", status: "MISSING",
+				name: testDoctorExistingBucketName, arn: testDoctorExistingBucketARN,
+			}},
+			stateByAddr:     map[string]terraformStateObject{},
+			liveByARN:       liveByARN,
+			liveByName:      liveByName,
+			wantCheckCount:  1,
+			wantFirstKey:    "state.outside-state.aws_s3_bucket.mybucket",
+			wantFirstStatus: "fail",
+		},
+		{
+			name: "not in state, live present, status MISSING -> warn in lenient mode",
+			mode: lenientMode,
+			expected: []expectedAuditResource{{
+				address: "aws_s3_bucket.mybucket", status: "MISSING",
+				name: testDoctorExistingBucketName, arn: testDoctorExistingBucketARN,
+			}},
+			stateByAddr:     map[string]terraformStateObject{},
+			liveByARN:       liveByARN,
+			liveByName:      liveByName,
+			wantCheckCount:  1,
+			wantFirstStatus: "warn",
+		},
+		{
+			name: "not in state, live present, not MISSING -> missing-address check",
+			mode: mode,
+			expected: []expectedAuditResource{{
+				address: "aws_s3_bucket.mybucket", status: "OK",
+				name: testDoctorExistingBucketName, arn: testDoctorExistingBucketARN,
+			}},
+			stateByAddr:    map[string]terraformStateObject{},
+			liveByARN:      liveByARN,
+			liveByName:     liveByName,
+			wantCheckCount: 1,
+			wantFirstKey:   "state.missing-address.aws_s3_bucket.mybucket",
+		},
+		{
+			name:           "in state, not live, status OK -> deleted-live check",
+			mode:           mode,
+			expected:       []expectedAuditResource{{address: "aws_s3_bucket.gone", status: "OK", name: "gone-bucket"}},
+			stateByAddr:    map[string]terraformStateObject{"aws_s3_bucket.gone": {Address: "aws_s3_bucket.gone", Name: "gone-bucket"}},
+			liveByARN:      emptyARN,
+			liveByName:     emptyName,
+			wantCheckCount: 1,
+			wantFirstKey:   "state.deleted-live.aws_s3_bucket.gone",
+		},
+		{
+			name:           "stale name check",
+			mode:           mode,
+			expected:       []expectedAuditResource{{address: testDoctorBucketBAddress, status: "OK", name: "new-bucket"}},
+			stateByAddr:    map[string]terraformStateObject{testDoctorBucketBAddress: {Address: testDoctorBucketBAddress, Name: "old-bucket"}},
+			liveByARN:      emptyARN,
+			liveByName:     liveByNameLocal,
+			wantCheckCount: 1,
+			wantFirstKey:   "state.stale-name.aws_s3_bucket.b",
+		},
+		{
+			name:           "stale ARN check",
+			mode:           mode,
+			expected:       []expectedAuditResource{{address: testDoctorBucketBAddress, status: "OK", arn: newARN}},
+			stateByAddr:    map[string]terraformStateObject{testDoctorBucketBAddress: {Address: testDoctorBucketBAddress, ARN: "arn:aws:s3:::old-bucket"}},
+			liveByARN:      liveByARNLocal,
+			liveByName:     emptyName,
+			wantCheckCount: 1,
+			wantFirstKey:   "state.stale-arn.aws_s3_bucket.b",
+		},
+		{
+			name:        "returns expectedAddresses map",
+			mode:        mode,
+			expected:    []expectedAuditResource{{address: "aws_s3_bucket.a", status: "OK"}, {address: testDoctorBucketBAddress, status: "OK"}},
+			stateByAddr: map[string]terraformStateObject{},
+			liveByARN:   emptyARN,
+			liveByName:  emptyName,
+			wantAddresses: map[string]bool{
+				"aws_s3_bucket.a":        true,
+				testDoctorBucketBAddress: true,
+			},
+		},
+	}
 
-	t.Run("not in state, live present, status MISSING → outside-state check", func(t *testing.T) {
-		expected := []expectedAuditResource{{
-			address: "aws_s3_bucket.mybucket", status: "MISSING",
-			name: "existing-bucket", arn: "arn:aws:s3:::existing-bucket",
-		}}
-		stateByAddr := map[string]terraformStateObject{}
-		_, checks := stateDoctorDriftChecks(mode, expected, stateByAddr, liveByARN, liveByName)
-		if len(checks) != 1 {
-			t.Fatalf("expected 1 check, got %d", len(checks))
-		}
-		if checks[0].Key != "state.outside-state.aws_s3_bucket.mybucket" {
-			t.Errorf("unexpected key: %s", checks[0].Key)
-		}
-		if checks[0].Status != "fail" {
-			t.Errorf("Status=%q want fail", checks[0].Status)
-		}
-	})
-
-	t.Run("not in state, live present, status MISSING → warn in lenient mode", func(t *testing.T) {
-		expected := []expectedAuditResource{{
-			address: "aws_s3_bucket.mybucket", status: "MISSING",
-			name: "existing-bucket", arn: "arn:aws:s3:::existing-bucket",
-		}}
-		stateByAddr := map[string]terraformStateObject{}
-		_, checks := stateDoctorDriftChecks(lenientMode, expected, stateByAddr, liveByARN, liveByName)
-		if len(checks) != 1 || checks[0].Status != "warn" {
-			t.Errorf("expected warn check, got %v", checks)
-		}
-	})
-
-	t.Run("not in state, live present, not MISSING → missing-address check", func(t *testing.T) {
-		expected := []expectedAuditResource{{
-			address: "aws_s3_bucket.mybucket", status: "OK",
-			name: "existing-bucket", arn: "arn:aws:s3:::existing-bucket",
-		}}
-		stateByAddr := map[string]terraformStateObject{}
-		_, checks := stateDoctorDriftChecks(mode, expected, stateByAddr, liveByARN, liveByName)
-		if len(checks) != 1 {
-			t.Fatalf("expected 1 check, got %d", len(checks))
-		}
-		if checks[0].Key != "state.missing-address.aws_s3_bucket.mybucket" {
-			t.Errorf("unexpected key: %s", checks[0].Key)
-		}
-	})
-
-	t.Run("in state, not live, status OK → deleted-live check", func(t *testing.T) {
-		expected := []expectedAuditResource{{address: "aws_s3_bucket.gone", status: "OK", name: "gone-bucket"}}
-		stateByAddr := map[string]terraformStateObject{
-			"aws_s3_bucket.gone": {Address: "aws_s3_bucket.gone", Name: "gone-bucket"},
-		}
-		_, checks := stateDoctorDriftChecks(mode, expected, stateByAddr, emptyARN, emptyName)
-		if len(checks) != 1 {
-			t.Fatalf("expected 1 check, got %d", len(checks))
-		}
-		if checks[0].Key != "state.deleted-live.aws_s3_bucket.gone" {
-			t.Errorf("unexpected key: %s", checks[0].Key)
-		}
-	})
-
-	t.Run("stale name check", func(t *testing.T) {
-		liveByNameLocal := map[string][]auditResource{
-			"new-bucket": {{name: "new-bucket"}},
-		}
-		expected := []expectedAuditResource{{address: "aws_s3_bucket.b", status: "OK", name: "new-bucket"}}
-		stateByAddr := map[string]terraformStateObject{
-			"aws_s3_bucket.b": {Address: "aws_s3_bucket.b", Name: "old-bucket"},
-		}
-		_, checks := stateDoctorDriftChecks(mode, expected, stateByAddr, emptyARN, liveByNameLocal)
-		if len(checks) != 1 {
-			t.Fatalf("expected 1 check, got %d", len(checks))
-		}
-		if checks[0].Key != "state.stale-name.aws_s3_bucket.b" {
-			t.Errorf("unexpected key: %s", checks[0].Key)
-		}
-	})
-
-	t.Run("stale ARN check", func(t *testing.T) {
-		newARN := "arn:aws:s3:::new-bucket"
-		liveByARNLocal := map[string]auditResource{
-			newARN: {arn: newARN, name: "new-bucket"},
-		}
-		expected := []expectedAuditResource{{address: "aws_s3_bucket.b", status: "OK", arn: newARN}}
-		stateByAddr := map[string]terraformStateObject{
-			"aws_s3_bucket.b": {Address: "aws_s3_bucket.b", ARN: "arn:aws:s3:::old-bucket"},
-		}
-		_, checks := stateDoctorDriftChecks(mode, expected, stateByAddr, liveByARNLocal, emptyName)
-		if len(checks) != 1 {
-			t.Fatalf("expected 1 check, got %d", len(checks))
-		}
-		if checks[0].Key != "state.stale-arn.aws_s3_bucket.b" {
-			t.Errorf("unexpected key: %s", checks[0].Key)
-		}
-	})
-
-	t.Run("returns expectedAddresses map", func(t *testing.T) {
-		expected := []expectedAuditResource{
-			{address: "aws_s3_bucket.a", status: "OK"},
-			{address: "aws_s3_bucket.b", status: "OK"},
-		}
-		stateByAddr := map[string]terraformStateObject{}
-		addrs, _ := stateDoctorDriftChecks(mode, expected, stateByAddr, emptyARN, emptyName)
-		if !addrs["aws_s3_bucket.a"] || !addrs["aws_s3_bucket.b"] {
-			t.Errorf("expected addresses not in map: %v", addrs)
-		}
-	})
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			assertDoctorStateDoctorDriftChecksCase(t, tc)
+		})
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -863,8 +900,8 @@ func TestDoctorStateDoctorStaleAddressCheck(t *testing.T) {
 
 	t.Run("some stale addresses", func(t *testing.T) {
 		stateByAddr := map[string]terraformStateObject{
-			"aws_s3_bucket.a": {Address: "aws_s3_bucket.a", Type: "aws_s3_bucket"},
-			"aws_s3_bucket.b": {Address: "aws_s3_bucket.b", Type: "aws_s3_bucket"},
+			"aws_s3_bucket.a":        {Address: "aws_s3_bucket.a", Type: "aws_s3_bucket"},
+			testDoctorBucketBAddress: {Address: testDoctorBucketBAddress, Type: "aws_s3_bucket"},
 		}
 		expected := map[string]bool{"aws_s3_bucket.a": true}
 		got := stateDoctorStaleAddressCheck(stateByAddr, expected)
@@ -982,7 +1019,7 @@ func TestDoctorStrconvQuoteString(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDoctorCheckRuntimeLambdaEnvironmentMissingKey(t *testing.T) {
-	topicARN := "arn:aws:sns:us-east-1:123:myorg-platform-events"
+	topicARN := testDoctorPlatformEventsARN
 	// Variables map exists but key is absent → actualTopicARN will be ""
 	out := lambdaOutputWithEnv(map[string]string{"OTHER_KEY": "val"})
 	got := checkRuntimeLambdaEnvironment(out, nil, "fn-name", topicARN)
@@ -997,7 +1034,7 @@ func TestDoctorCheckRuntimeLambdaEnvironmentMissingKey(t *testing.T) {
 
 func TestDoctorCheckRuntimeActivationScheduleDetailPrefix(t *testing.T) {
 	org := "myorg"
-	lambdaARN := "arn:aws:lambda:us-east-1:123:function:myorg-activate-cost-tags"
+	lambdaARN := testDoctorLambdaARN
 	roleARN := "arn:aws:iam::123:role/myorg-scheduler-invoke-activate"
 	s := perfectSchedule(org, lambdaARN, roleARN)
 	got := checkRuntimeActivationSchedule(s, org, lambdaARN, roleARN)
@@ -1011,7 +1048,7 @@ func TestDoctorCheckRuntimeActivationScheduleDetailPrefix(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDoctorCheckRuntimeLambdaEnvironmentMismatchDetail(t *testing.T) {
-	topicARN := "arn:aws:sns:us-east-1:123:myorg-platform-events"
+	topicARN := testDoctorPlatformEventsARN
 	wrong := "arn:aws:sns:us-east-1:123:wrong-topic"
 	out := lambdaOutputWithEnv(map[string]string{"PLATFORM_EVENTS_TOPIC_ARN": wrong})
 	got := checkRuntimeLambdaEnvironment(out, nil, "fn", topicARN)

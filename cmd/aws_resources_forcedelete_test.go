@@ -17,6 +17,8 @@ import (
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
+const ecsDeleteTaskDefinitionsTarget = "AmazonEC2ContainerServiceV20141113.DeleteTaskDefinitions"
+
 func testECSClient(t *testing.T, handler http.HandlerFunc) *ecs.Client {
 	t.Helper()
 	server := httptest.NewServer(handler)
@@ -78,7 +80,7 @@ func TestForceDeleteIAMRoleEmptyPoliciesSuccess(t *testing.T) {
 		})
 	}
 	if err := forceDeleteIAMRole(context.Background(), "my-role"); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 }
 
@@ -148,7 +150,7 @@ func TestForceDeleteS3BucketEmptyBucketSuccess(t *testing.T) {
 		})
 	}
 	if err := forceDeleteS3Bucket(context.Background(), "empty-bucket"); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 }
 
@@ -237,7 +239,7 @@ func TestDeleteECSTaskDefinitionActiveDeregisterThenDelete(t *testing.T) {
 			case target == "AmazonEC2ContainerServiceV20141113.DeregisterTaskDefinition":
 				calls["deregister"]++
 				_, _ = io.WriteString(w, `{"taskDefinition":{"taskDefinitionArn":"arn:aws:ecs:us-east-1:123:task-definition/my:1","status":"INACTIVE"}}`)
-			case target == "AmazonEC2ContainerServiceV20141113.DeleteTaskDefinitions":
+			case target == ecsDeleteTaskDefinitionsTarget:
 				calls["delete"]++
 				_, _ = io.WriteString(w, `{"taskDefinitions":[],"failures":[]}`)
 			default:
@@ -246,7 +248,7 @@ func TestDeleteECSTaskDefinitionActiveDeregisterThenDelete(t *testing.T) {
 		})
 	}
 	if err := deleteECSTaskDefinition(context.Background(), "arn:aws:ecs:us-east-1:123:task-definition/my:1"); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if calls["describe"] != 1 || calls["deregister"] != 1 || calls["delete"] != 1 {
 		t.Fatalf("unexpected call counts: %v", calls)
@@ -267,7 +269,7 @@ func TestDeleteECSTaskDefinitionInactiveSkipsDeregister(t *testing.T) {
 			case target == "AmazonEC2ContainerServiceV20141113.DeregisterTaskDefinition":
 				deregisterCalls++
 				w.WriteHeader(http.StatusInternalServerError)
-			case target == "AmazonEC2ContainerServiceV20141113.DeleteTaskDefinitions":
+			case target == ecsDeleteTaskDefinitionsTarget:
 				_, _ = io.WriteString(w, `{"taskDefinitions":[],"failures":[]}`)
 			default:
 				w.WriteHeader(http.StatusBadRequest)
@@ -275,7 +277,7 @@ func TestDeleteECSTaskDefinitionInactiveSkipsDeregister(t *testing.T) {
 		})
 	}
 	if err := deleteECSTaskDefinition(context.Background(), "arn:aws:ecs:us-east-1:123:task-definition/my:1"); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if deregisterCalls != 0 {
 		t.Fatalf("expected 0 deregister calls for INACTIVE task def, got %d", deregisterCalls)
@@ -292,7 +294,7 @@ func TestDeleteECSTaskDefinitionDeleteFailures(t *testing.T) {
 			switch {
 			case target == "AmazonEC2ContainerServiceV20141113.DescribeTaskDefinition":
 				_, _ = io.WriteString(w, `{"taskDefinition":{"taskDefinitionArn":"arn:...","status":"INACTIVE"}}`)
-			case target == "AmazonEC2ContainerServiceV20141113.DeleteTaskDefinitions":
+			case target == ecsDeleteTaskDefinitionsTarget:
 				_, _ = io.WriteString(w, `{"taskDefinitions":[],"failures":[{"arn":"arn:...","reason":"something went wrong"}]}`)
 			default:
 				w.WriteHeader(http.StatusBadRequest)
@@ -317,7 +319,7 @@ func TestResourceExistsECSTaskDefinitionFound(t *testing.T) {
 	}
 	exists, err := resourceExists(context.Background(), auditResource{resourceType: "ecs/task-definition", arn: "arn:aws:ecs:us-east-1:123:task-definition/my:1"})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if !exists {
 		t.Fatal("expected exists=true")
@@ -336,7 +338,7 @@ func TestResourceExistsECSTaskDefinitionNotFound(t *testing.T) {
 	}
 	exists, err := resourceExists(context.Background(), auditResource{resourceType: "ecs/task-definition", arn: "arn:..."})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if exists {
 		t.Fatal("expected exists=false")
@@ -373,7 +375,7 @@ func TestResourceExistsLightsailStaticIpFound(t *testing.T) {
 	}
 	exists, err := resourceExists(context.Background(), auditResource{resourceType: "lightsail/StaticIp", name: "my-ip"})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if !exists {
 		t.Fatal("expected exists=true")
@@ -392,7 +394,7 @@ func TestResourceExistsLightsailStaticIpNotFound(t *testing.T) {
 	}
 	exists, err := resourceExists(context.Background(), auditResource{resourceType: "lightsail/StaticIp", name: "my-ip"})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if exists {
 		t.Fatal("expected exists=false")
@@ -410,7 +412,7 @@ func TestResourceExistsLightsailKeyPairFound(t *testing.T) {
 	}
 	exists, err := resourceExists(context.Background(), auditResource{resourceType: "lightsail/KeyPair", name: "my-key"})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if !exists {
 		t.Fatal("expected exists=true")
@@ -421,7 +423,7 @@ func TestResourceExistsDefaultReturnsTrue(t *testing.T) {
 	t.Parallel()
 	exists, err := resourceExists(context.Background(), auditResource{resourceType: "unknown/type"})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if !exists {
 		t.Fatal("expected exists=true for unknown type")

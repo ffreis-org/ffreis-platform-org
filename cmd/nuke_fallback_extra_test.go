@@ -114,7 +114,7 @@ func TestFindMatchingLockItemsTableNotFound(t *testing.T) {
 	}
 	items, err := findMatchingLockItems(context.Background(), mock, "tbl", "bucket", "key")
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if items != nil {
 		t.Fatalf("expected nil items, got %v", items)
@@ -156,7 +156,7 @@ func TestFindMatchingLockItemsReturnsMatchingItems(t *testing.T) {
 
 	items, err := findMatchingLockItems(context.Background(), mock, "tbl", bucket, stateKey)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if len(items) != 1 {
 		t.Fatalf("expected 1 matching item, got %d", len(items))
@@ -286,7 +286,7 @@ func TestCheckStateBackendExistsReturnsTrueOnSuccess(t *testing.T) {
 
 	exists, err := checkStateBackendExists(context.Background(), sdkaws.Config{}, "myorg")
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if !exists {
 		t.Fatal("expected exists=true when HeadBucket succeeds")
@@ -306,7 +306,7 @@ func TestCheckStateBackendExistsReturnsFalseOnNoSuchBucket(t *testing.T) {
 
 	exists, err := checkStateBackendExists(context.Background(), sdkaws.Config{}, "myorg")
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if exists {
 		t.Fatal("expected exists=false when NoSuchBucket is returned")
@@ -326,7 +326,7 @@ func TestCheckStateBackendExistsReturnsErrorOnOtherError(t *testing.T) {
 
 	exists, err := checkStateBackendExists(context.Background(), sdkaws.Config{}, "myorg")
 	if err == nil {
-		t.Fatal("expected error on unexpected HeadBucket failure")
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if exists {
 		t.Fatal("expected exists=false on error")

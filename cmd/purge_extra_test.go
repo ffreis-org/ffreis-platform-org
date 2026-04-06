@@ -4,6 +4,8 @@ import (
 	"testing"
 )
 
+const testPurgeECSClusterName = "my-cluster"
+
 // --- iamToCloudControl: user and group branches ---
 
 func TestIAMToCloudControlUser(t *testing.T) {
@@ -53,8 +55,8 @@ func TestEC2ToCloudControlInternetGateway(t *testing.T) {
 // --- ecsToCloudControl: cluster, service ---
 
 func TestECSToCloudControlCluster(t *testing.T) {
-	cfnType, id := ecsToCloudControl("ecs/cluster", "my-cluster", "arn:aws:ecs:us-east-1:123:cluster/my-cluster")
-	if cfnType != "AWS::ECS::Cluster" || id != "my-cluster" {
+	cfnType, id := ecsToCloudControl("ecs/cluster", testPurgeECSClusterName, "arn:aws:ecs:us-east-1:123:cluster/"+testPurgeECSClusterName)
+	if cfnType != "AWS::ECS::Cluster" || id != testPurgeECSClusterName {
 		t.Fatalf("ecsToCloudControl(ecs/cluster) = (%q, %q)", cfnType, id)
 	}
 }
@@ -179,9 +181,9 @@ func TestArnToCloudControlELBLoadBalancer(t *testing.T) {
 }
 
 func TestArnToCloudControlECSClusterViaArn(t *testing.T) {
-	arn := "arn:aws:ecs:us-east-1:123:cluster/my-cluster"
-	cfnType, id := arnToCloudControl(arn, "ecs", "ecs/cluster", "my-cluster")
-	if cfnType != "AWS::ECS::Cluster" || id != "my-cluster" {
+	arn := "arn:aws:ecs:us-east-1:123:cluster/" + testPurgeECSClusterName
+	cfnType, id := arnToCloudControl(arn, "ecs", "ecs/cluster", testPurgeECSClusterName)
+	if cfnType != "AWS::ECS::Cluster" || id != testPurgeECSClusterName {
 		t.Fatalf("arnToCloudControl(ecs/cluster) = (%q, %q)", cfnType, id)
 	}
 }

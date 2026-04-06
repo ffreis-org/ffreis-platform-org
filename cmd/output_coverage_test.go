@@ -8,6 +8,8 @@ import (
 	platformui "github.com/ffreis/platform-org/internal/ui"
 )
 
+const testOutputFineMessage = "everything is fine"
+
 // newPlainOutput returns a commandOutput with a nil UI (plain / NO_COLOR mode).
 func newPlainOutput(t *testing.T) (*commandOutput, *bytes.Buffer, *bytes.Buffer) {
 	t.Helper()
@@ -89,9 +91,9 @@ func TestSummaryRichDelegatesToUI(t *testing.T) {
 
 func TestStatusPlain(t *testing.T) {
 	o, out, _ := newPlainOutput(t)
-	o.Status("ok", "ok", "everything is fine")
+	o.Status("ok", "ok", testOutputFineMessage)
 	got := out.String()
-	if !strings.Contains(got, "[ok]") || !strings.Contains(got, "everything is fine") {
+	if !strings.Contains(got, "[ok]") || !strings.Contains(got, testOutputFineMessage) {
 		t.Fatalf("Status output: %q", got)
 	}
 }
@@ -104,7 +106,7 @@ func TestStatusRichDelegatesToUI(t *testing.T) {
 	}
 	var out, errBuf bytes.Buffer
 	o := newWriterOutput(&out, &errBuf, ui)
-	o.Status("ok", "ok", "everything is fine")
+	o.Status("ok", "ok", testOutputFineMessage)
 	if out.String() == "" {
 		t.Fatal("expected non-empty status output in rich mode")
 	}

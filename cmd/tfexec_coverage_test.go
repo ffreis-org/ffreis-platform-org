@@ -6,11 +6,13 @@ import (
 	"testing"
 )
 
+const testWantGotErrorf = "want %q got %q"
+
 func TestTerraformCommandErrorUsesStderr(t *testing.T) {
 	got := terraformCommandError("stdout output", "  stderr output  ")
 	want := "stderr output"
 	if got != want {
-		t.Fatalf("want %q got %q", want, got)
+		t.Fatalf(testWantGotErrorf, want, got)
 	}
 }
 
@@ -18,7 +20,7 @@ func TestTerraformCommandErrorFallsBackToStdout(t *testing.T) {
 	got := terraformCommandError("  stdout only  ", "")
 	want := "stdout only"
 	if got != want {
-		t.Fatalf("want %q got %q", want, got)
+		t.Fatalf(testWantGotErrorf, want, got)
 	}
 }
 
@@ -26,7 +28,7 @@ func TestTerraformCommandErrorReturnsNoOutputWhenBothEmpty(t *testing.T) {
 	got := terraformCommandError("", "  ")
 	want := "no output"
 	if got != want {
-		t.Fatalf("want %q got %q", want, got)
+		t.Fatalf(testWantGotErrorf, want, got)
 	}
 }
 

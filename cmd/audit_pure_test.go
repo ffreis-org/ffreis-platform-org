@@ -13,6 +13,12 @@ import (
 	schedulertypes "github.com/aws/aws-sdk-go-v2/service/scheduler/types"
 )
 
+const (
+	testAuditBucketARN = "arn:aws:s3:::my-bucket"
+	testAuditOrgName   = "my-org"
+	testAuditGroupName = "my-org-platform-org"
+)
+
 // ---------------------------------------------------------------------------
 // appendTaggedResource
 // ---------------------------------------------------------------------------
@@ -23,7 +29,7 @@ func TestAppendTaggedResourceExists(t *testing.T) {
 	resourceExistsFn = func(context.Context, auditResource) (bool, error) { return true, nil }
 
 	mapping := testResourceTagMapping(
-		"arn:aws:s3:::my-bucket",
+		testAuditBucketARN,
 		testTag("Stack", platformOrgStackTag),
 		testTag("Project", "platform"),
 		testTag("Environment", "prod"),
@@ -41,7 +47,7 @@ func TestAppendTaggedResourceNotExists(t *testing.T) {
 	resourceExistsFn = func(context.Context, auditResource) (bool, error) { return false, nil }
 
 	mapping := testResourceTagMapping(
-		"arn:aws:s3:::my-bucket",
+		testAuditBucketARN,
 		testTag("Stack", platformOrgStackTag),
 		testTag("ManagedBy", "terraform"),
 	)
@@ -59,7 +65,7 @@ func TestAppendTaggedResourceExistenceError(t *testing.T) {
 	}
 
 	mapping := testResourceTagMapping(
-		"arn:aws:s3:::my-bucket",
+		testAuditBucketARN,
 		testTag("Stack", platformOrgStackTag),
 		testTag("ManagedBy", "terraform"),
 	)
@@ -189,24 +195,24 @@ func TestMatchExpectedAuditResourceNoARNNoName(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestMatchedDiscoveredResourceKeyWithARN(t *testing.T) {
-	r := auditResource{arn: "arn:aws:s3:::my-bucket", resourceType: "s3", name: "my-bucket", stack: "platform-org"}
+	r := auditResource{arn: testAuditBucketARN, resourceType: "s3", name: "my-bucket", stack: platformOrgStackTag}
 	key := matchedDiscoveredResourceKey(r)
 	if !strings.HasPrefix(key, "arn:") {
 		t.Fatalf("expected key to start with 'arn:' for resource with arn, got %q", key)
 	}
-	if key != "arn:arn:aws:s3:::my-bucket" {
+	if key != "arn:"+testAuditBucketARN {
 		t.Fatalf("unexpected key %q", key)
 	}
 }
 
 func TestMatchedDiscoveredResourceKeyWithoutARN(t *testing.T) {
-	r := auditResource{resourceType: "s3", name: "my-bucket", stack: "platform-org"}
+	r := auditResource{resourceType: "s3", name: "my-bucket", stack: platformOrgStackTag}
 	key := matchedDiscoveredResourceKey(r)
 	if strings.HasPrefix(key, "arn:") {
 		t.Fatalf("expected key not to start with 'arn:' for resource without arn, got %q", key)
 	}
 	// should be stack|type|name lowercased
-	expected := "platform-org|s3|my-bucket"
+	expected := platformOrgStackTag + "|s3|my-bucket"
 	if key != expected {
 		t.Fatalf("expected key %q, got %q", expected, key)
 	}
@@ -242,7 +248,7 @@ func TestParseARNSlashBeforeColon(t *testing.T) {
 
 func TestParseARNServiceOnly(t *testing.T) {
 	// No separator: service-level resource (e.g. S3 bucket with no path)
-	arn := "arn:aws:s3:::my-bucket"
+	arn := testAuditBucketARN
 	rtype, name := parseARN(arn)
 	if rtype != "s3" {
 		t.Errorf("rtype: want s3 got %q", rtype)
@@ -355,7 +361,7 @@ func TestParseExpectedPlatformOrgResourcesNoOpAction(t *testing.T) {
 	}`)
 	defs, err := parseExpectedPlatformOrgResources(data)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if len(defs) != 1 || defs[0].status != "OK" {
 		t.Fatalf("expected 1 no-op resource with status OK, got %#v", defs)
@@ -388,7 +394,7 @@ func TestParseExpectedPlatformOrgResourcesCreateAction(t *testing.T) {
 	}`)
 	defs, err := parseExpectedPlatformOrgResources(data)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if len(defs) != 1 || defs[0].status != "MISSING" {
 		t.Fatalf("expected 1 create resource with status MISSING, got %#v", defs)
@@ -421,7 +427,7 @@ func TestParseExpectedPlatformOrgResourcesWarnAction(t *testing.T) {
 	}`)
 	defs, err := parseExpectedPlatformOrgResources(data)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if len(defs) != 1 || defs[0].status != "WARN" {
 		t.Fatalf("expected 1 replace resource with status WARN, got %#v", defs)
@@ -450,7 +456,7 @@ func TestParseExpectedPlatformOrgResourcesExcludedType(t *testing.T) {
 	}`)
 	defs, err := parseExpectedPlatformOrgResources(data)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if len(defs) != 0 {
 		t.Fatalf("expected excluded type to be filtered, got %#v", defs)
@@ -629,14 +635,14 @@ func TestTerraformResourceDisplayNameFallback(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestTerraformResourceTaggableWithTagsField(t *testing.T) {
-	values := map[string]any{"tags": map[string]any{"Stack": "platform-org"}}
+	values := map[string]any{"tags": map[string]any{"Stack": platformOrgStackTag}}
 	if !terraformResourceTaggable("aws_s3_bucket", values) {
 		t.Fatal("expected taggable when tags field present")
 	}
 }
 
 func TestTerraformResourceTaggableWithTagsAllField(t *testing.T) {
-	values := map[string]any{"tags_all": map[string]any{"Stack": "platform-org"}}
+	values := map[string]any{"tags_all": map[string]any{"Stack": platformOrgStackTag}}
 	if !terraformResourceTaggable("aws_sqs_queue", values) {
 		t.Fatal("expected taggable when tags_all field present")
 	}
@@ -678,7 +684,7 @@ func TestActivationScheduleFound(t *testing.T) {
 	defer func() { getScheduleFn = old }()
 
 	schedName := "my-org-activate-cost-tags"
-	groupName := "my-org-platform-org"
+	groupName := testAuditGroupName
 	schedARN := "arn:aws:scheduler:::schedule/" + groupName + "/" + schedName
 
 	getScheduleFn = func(_ context.Context, input *scheduler.GetScheduleInput) (*scheduler.GetScheduleOutput, error) {
@@ -695,9 +701,9 @@ func TestActivationScheduleFound(t *testing.T) {
 		}, nil
 	}
 
-	details, err := activationSchedule(context.Background(), "my-org")
+	details, err := activationSchedule(context.Background(), testAuditOrgName)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if details == nil {
 		t.Fatal("expected schedule details, got nil")
@@ -718,7 +724,7 @@ func TestActivationScheduleNotFound(t *testing.T) {
 		return nil, errors.New("resource not found")
 	}
 
-	details, err := activationSchedule(context.Background(), "my-org")
+	details, err := activationSchedule(context.Background(), testAuditOrgName)
 	if err != nil {
 		t.Fatalf("expected nil error for not-found, got: %v", err)
 	}
@@ -735,7 +741,7 @@ func TestActivationScheduleError(t *testing.T) {
 		return nil, errors.New("unexpected scheduler failure")
 	}
 
-	details, err := activationSchedule(context.Background(), "my-org")
+	details, err := activationSchedule(context.Background(), testAuditOrgName)
 	if err == nil {
 		t.Fatal("expected error for scheduler failure")
 	}
@@ -756,9 +762,9 @@ func TestListPlatformOrgSchedulesEmpty(t *testing.T) {
 		return &scheduler.ListSchedulesOutput{Schedules: nil}, nil
 	}
 
-	schedules, err := listPlatformOrgSchedules(context.Background(), "my-org")
+	schedules, err := listPlatformOrgSchedules(context.Background(), testAuditOrgName)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if len(schedules) != 0 {
 		t.Fatalf("expected 0 schedules, got %d", len(schedules))
@@ -776,7 +782,7 @@ func TestListPlatformOrgSchedulesPaginated(t *testing.T) {
 		case 1:
 			return &scheduler.ListSchedulesOutput{
 				Schedules: []schedulertypes.ScheduleSummary{
-					{Name: sdkaws.String("sched-1"), GroupName: sdkaws.String("my-org-platform-org"), Arn: sdkaws.String("arn:1"), State: schedulertypes.ScheduleStateEnabled},
+					{Name: sdkaws.String("sched-1"), GroupName: sdkaws.String(testAuditGroupName), Arn: sdkaws.String("arn:1"), State: schedulertypes.ScheduleStateEnabled},
 				},
 				NextToken: sdkaws.String("page2"),
 			}, nil
@@ -786,7 +792,7 @@ func TestListPlatformOrgSchedulesPaginated(t *testing.T) {
 			}
 			return &scheduler.ListSchedulesOutput{
 				Schedules: []schedulertypes.ScheduleSummary{
-					{Name: sdkaws.String("sched-2"), GroupName: sdkaws.String("my-org-platform-org"), Arn: sdkaws.String("arn:2"), State: schedulertypes.ScheduleStateDisabled},
+					{Name: sdkaws.String("sched-2"), GroupName: sdkaws.String(testAuditGroupName), Arn: sdkaws.String("arn:2"), State: schedulertypes.ScheduleStateDisabled},
 				},
 			}, nil
 		default:
@@ -795,9 +801,9 @@ func TestListPlatformOrgSchedulesPaginated(t *testing.T) {
 		}
 	}
 
-	schedules, err := listPlatformOrgSchedules(context.Background(), "my-org")
+	schedules, err := listPlatformOrgSchedules(context.Background(), testAuditOrgName)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if len(schedules) != 2 {
 		t.Fatalf("expected 2 schedules, got %d", len(schedules))
@@ -812,7 +818,7 @@ func TestListPlatformOrgSchedulesNotFound(t *testing.T) {
 		return nil, errors.New("resource not found")
 	}
 
-	schedules, err := listPlatformOrgSchedules(context.Background(), "my-org")
+	schedules, err := listPlatformOrgSchedules(context.Background(), testAuditOrgName)
 	if err != nil {
 		t.Fatalf("expected nil error for not-found, got: %v", err)
 	}
@@ -829,7 +835,7 @@ func TestListPlatformOrgSchedulesError(t *testing.T) {
 		return nil, errors.New("list schedules failed")
 	}
 
-	_, err := listPlatformOrgSchedules(context.Background(), "my-org")
+	_, err := listPlatformOrgSchedules(context.Background(), testAuditOrgName)
 	if err == nil || !strings.Contains(err.Error(), "list schedules failed") {
 		t.Fatalf("expected error containing 'list schedules failed', got: %v", err)
 	}

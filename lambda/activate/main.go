@@ -17,31 +17,44 @@ import (
 	"github.com/ffreis/platform-org/internal/activation"
 )
 
-func handler(ctx context.Context, _ json.RawMessage) error {
-	topicARN := os.Getenv("PLATFORM_EVENTS_TOPIC_ARN")
-
-	// AWS_REGION is injected automatically by the Lambda runtime.
-	cfg, err := sdkconfig.LoadDefaultConfig(ctx)
-	if err != nil {
-		return fmt.Errorf("load AWS config: %w", err)
+var (
+	loadDefaultConfigFn = sdkconfig.LoadDefaultConfig
+	activateCostTagsFn  = func(ctx context.Context, cfg sdkaws.Config) error {
+		return activation.Activate(ctx, costexplorer.NewFromConfig(cfg))
 	}
-
-	snsClient := sns.NewFromConfig(cfg)
-	publish := func(subject, msg string) {
-		if topicARN == "" {
-			return
-		}
-		_, pubErr := snsClient.Publish(ctx, &sns.PublishInput{
+	publishNotificationFn = func(ctx context.Context, cfg sdkaws.Config, topicARN, subject, msg string) error {
+		_, err := sns.NewFromConfig(cfg).Publish(ctx, &sns.PublishInput{
 			TopicArn: sdkaws.String(topicARN),
 			Subject:  sdkaws.String(subject),
 			Message:  sdkaws.String(msg),
 		})
+		return err
+	}
+	lambdaStartFn = func() {
+		lambda.Start(handler)
+	}
+)
+
+func handler(ctx context.Context, _ json.RawMessage) error {
+	topicARN := os.Getenv("PLATFORM_EVENTS_TOPIC_ARN")
+
+	// AWS_REGION is injected automatically by the Lambda runtime.
+	cfg, err := loadDefaultConfigFn(ctx)
+	if err != nil {
+		return fmt.Errorf("load AWS config: %w", err)
+	}
+
+	publish := func(subject, msg string) {
+		if topicARN == "" {
+			return
+		}
+		pubErr := publishNotificationFn(ctx, cfg, topicARN, subject, msg)
 		if pubErr != nil {
 			log.Printf("WARN: failed to publish SNS notification: %v", pubErr)
 		}
 	}
 
-	activateErr := activation.Activate(ctx, costexplorer.NewFromConfig(cfg))
+	activateErr := activateCostTagsFn(ctx, cfg)
 	if activateErr != nil {
 		var notReady *activation.ErrNotReady
 		if errors.As(activateErr, &notReady) {
@@ -79,5 +92,5 @@ func handler(ctx context.Context, _ json.RawMessage) error {
 }
 
 func main() {
-	lambda.Start(handler)
+	lambdaStartFn()
 }

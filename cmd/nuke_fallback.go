@@ -59,6 +59,7 @@ type nukeBackendResetDynamoAPI interface {
 
 const (
 	resourceTypeOrganizationsPolicyAttachment = "organizations/policy-attachment"
+	resourceTypeOrganizationsOrganization     = "organizations/organization"
 	orgPolicyDenyLeaveOrganizationName        = "deny-leave-organization"
 	resourceTypeOrganizationsPolicy           = "organizations/policy"
 	resourceTypeIAMRole                       = "iam/role"
@@ -320,7 +321,7 @@ func explicitPlatformOrgCleanupTargets(ctx context.Context) ([]auditResource, er
 
 	checks := []existsCheck{
 		{
-			resource: auditResource{status: "OK", resourceType: "organizations/organization", name: "organization", stack: stackNamePlatformOrg},
+			resource: auditResource{status: "OK", resourceType: resourceTypeOrganizationsOrganization, name: "organization", stack: stackNamePlatformOrg},
 			exists:   organizationExists,
 		},
 		{
@@ -514,7 +515,7 @@ func nukeCleanupTargetRank(resource auditResource) int {
 		return 12
 	case "organizations/organizational-unit":
 		return 13
-	case "organizations/organization":
+	case resourceTypeOrganizationsOrganization:
 		return 14
 	default:
 		return 20
@@ -578,7 +579,7 @@ func parseBackendConfigFile(path string) (map[string]string, error) {
 	return values, nil
 }
 
-func backupBackendStateData(ctx context.Context, s3Client nukeBackendResetS3API, dynamoClient nukeBackendResetDynamoAPI, cfg nukeBackendStateConfig, stateVersions []s3types.ObjectVersion, deleteMarkers []s3types.DeleteMarkerEntry, lockItems []map[string]dbtypes.AttributeValue, backupDir string) (string, error) {
+func backupBackendStateData(ctx context.Context, s3Client nukeBackendResetS3API, cfg nukeBackendStateConfig, stateVersions []s3types.ObjectVersion, deleteMarkers []s3types.DeleteMarkerEntry, lockItems []map[string]dbtypes.AttributeValue, backupDir string) (string, error) {
 	if len(stateVersions) == 0 && len(deleteMarkers) == 0 && len(lockItems) == 0 {
 		return "", nil
 	}
@@ -682,7 +683,7 @@ func resetBackendStateForNuke(ctx context.Context, root, stack, env, backupDir s
 		return nukeBackendResetSummary{}, err
 	}
 
-	summary.BackupDir, err = backupBackendStateData(ctx, s3Client, dynamoClient, cfg, stateVersions, deleteMarkers, lockItems, backupDir)
+	summary.BackupDir, err = backupBackendStateData(ctx, s3Client, cfg, stateVersions, deleteMarkers, lockItems, backupDir)
 	if err != nil {
 		return nukeBackendResetSummary{}, err
 	}

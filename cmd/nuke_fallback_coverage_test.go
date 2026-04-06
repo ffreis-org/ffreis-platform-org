@@ -5,9 +5,14 @@ import (
 	"testing"
 )
 
+const (
+	testBackendConfigFileName        = "backend.hcl"
+	testParseBackendConfigFileErrorf = "parseBackendConfigFile: %v"
+)
+
 func TestParseBackendConfigFileReadsKeyValues(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "backend.hcl")
+	path := filepath.Join(dir, testBackendConfigFileName)
 	writeFile(t, path, `
 # This is a comment
 bucket = "my-state-bucket"
@@ -16,7 +21,7 @@ key = "prod/terraform.tfstate"
 `)
 	got, err := parseBackendConfigFile(path)
 	if err != nil {
-		t.Fatalf("parseBackendConfigFile: %v", err)
+		t.Fatalf(testParseBackendConfigFileErrorf, err)
 	}
 	if got["bucket"] != "my-state-bucket" {
 		t.Errorf("bucket: %q", got["bucket"])
@@ -31,7 +36,7 @@ key = "prod/terraform.tfstate"
 
 func TestParseBackendConfigFileIgnoresCommentLines(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "backend.hcl")
+	path := filepath.Join(dir, testBackendConfigFileName)
 	writeFile(t, path, `
 # comment line
 // another comment
@@ -39,7 +44,7 @@ bucket = "bucket-name"
 `)
 	got, err := parseBackendConfigFile(path)
 	if err != nil {
-		t.Fatalf("parseBackendConfigFile: %v", err)
+		t.Fatalf(testParseBackendConfigFileErrorf, err)
 	}
 	if len(got) != 1 || got["bucket"] != "bucket-name" {
 		t.Errorf("unexpected map: %v", got)
@@ -48,14 +53,14 @@ bucket = "bucket-name"
 
 func TestParseBackendConfigFileIgnoresLinesWithoutSeparator(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "backend.hcl")
+	path := filepath.Join(dir, testBackendConfigFileName)
 	writeFile(t, path, `
 no_separator_line
 bucket = "ok"
 `)
 	got, err := parseBackendConfigFile(path)
 	if err != nil {
-		t.Fatalf("parseBackendConfigFile: %v", err)
+		t.Fatalf(testParseBackendConfigFileErrorf, err)
 	}
 	// Only "bucket" should be parsed; the no-separator line is skipped.
 	if _, ok := got["no_separator_line"]; ok {
@@ -82,7 +87,7 @@ bucket = "state-bucket"
 dynamodb_table = "lock-table"
 `)
 	// Write a backend.hcl in the env dir.
-	writeFile(t, filepath.Join(root, envsDirName, testEnv, "backend.hcl"), `
+	writeFile(t, filepath.Join(root, envsDirName, testEnv, testBackendConfigFileName), `
 key = "prod/terraform.tfstate"
 `)
 
@@ -106,7 +111,7 @@ func TestLoadBackendStateConfigForNukeReturnsErrorWhenIncomplete(t *testing.T) {
 	stack := initRepoLayout(t, root, testEnv)
 	// backend.local.hcl present but missing dynamodb_table.
 	writeFile(t, filepath.Join(stack, "backend.local.hcl"), `bucket = "only-bucket"`)
-	writeFile(t, filepath.Join(root, envsDirName, testEnv, "backend.hcl"), `key = "prod/terraform.tfstate"`)
+	writeFile(t, filepath.Join(root, envsDirName, testEnv, testBackendConfigFileName), `key = "prod/terraform.tfstate"`)
 
 	_, err := loadBackendStateConfigForNuke(root, testEnv)
 	if err == nil {

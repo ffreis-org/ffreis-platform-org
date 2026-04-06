@@ -17,6 +17,12 @@ import (
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
+const (
+	testExpectedNonEmptyTargetDir = "expected non-empty targetDir"
+	testNukeFallbackLockID        = "lock-1"
+	testNukeFallbackStateKey      = "state.tfstate"
+)
+
 // --- listStateObjectVersions ---
 
 func TestListStateObjectVersionsBucketMissing(t *testing.T) {
@@ -26,7 +32,7 @@ func TestListStateObjectVersionsBucketMissing(t *testing.T) {
 			return nil, &s3types.NotFound{}
 		},
 	}
-	versions, markers, err := listStateObjectVersions(context.Background(), mock, "missing-bucket", "state.tfstate")
+	versions, markers, err := listStateObjectVersions(context.Background(), mock, "missing-bucket", testNukeFallbackStateKey)
 	if err != nil {
 		t.Fatalf("expected nil error for missing bucket, got: %v", err)
 	}
@@ -42,7 +48,7 @@ func TestListStateObjectVersionsHeadBucketError(t *testing.T) {
 			return nil, errors.New("access denied")
 		},
 	}
-	_, _, err := listStateObjectVersions(context.Background(), mock, "my-bucket", "state.tfstate")
+	_, _, err := listStateObjectVersions(context.Background(), mock, "my-bucket", testNukeFallbackStateKey)
 	if err == nil {
 		t.Fatal("expected error from HeadBucket failure")
 	}
@@ -71,7 +77,7 @@ func TestListStateObjectVersionsReturnsMatchingVersionsAndMarkers(t *testing.T) 
 	}
 	versions, markers, err := listStateObjectVersions(context.Background(), mock, "my-bucket", stateKey)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if len(versions) != 1 {
 		t.Fatalf("expected 1 matching version, got %d", len(versions))
@@ -107,7 +113,7 @@ func TestListStateObjectVersionsPaginates(t *testing.T) {
 	}
 	versions, _, err := listStateObjectVersions(context.Background(), mock, "my-bucket", stateKey)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if calls != 2 {
 		t.Fatalf("expected 2 list calls, got %d", calls)
@@ -127,7 +133,7 @@ func TestListStateObjectVersionsListError(t *testing.T) {
 			return nil, errors.New("list failed")
 		},
 	}
-	_, _, err := listStateObjectVersions(context.Background(), mock, "my-bucket", "state.tfstate")
+	_, _, err := listStateObjectVersions(context.Background(), mock, "my-bucket", testNukeFallbackStateKey)
 	if err == nil {
 		t.Fatal("expected error from ListObjectVersions failure")
 	}
@@ -145,7 +151,7 @@ func TestDeleteStateVersionsAndMarkersEmptyLists(t *testing.T) {
 	cfg := nukeBackendStateConfig{BucketName: "bucket", TableName: "table", StateKey: "key"}
 	deletedVersions, deletedMarkers, err := deleteStateVersionsAndMarkers(context.Background(), mock, cfg, nil, nil)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if deletedVersions != 0 || deletedMarkers != 0 {
 		t.Fatalf("expected (0, 0), got (%d, %d)", deletedVersions, deletedMarkers)
@@ -164,17 +170,17 @@ func TestDeleteStateVersionsAndMarkersDeletesVersionsAndMarkers(t *testing.T) {
 			return &s3.DeleteObjectOutput{}, nil
 		},
 	}
-	cfg := nukeBackendStateConfig{BucketName: "bucket", TableName: "table", StateKey: "state.tfstate"}
+	cfg := nukeBackendStateConfig{BucketName: "bucket", TableName: "table", StateKey: testNukeFallbackStateKey}
 	versions := []s3types.ObjectVersion{
-		{Key: sdkaws.String("state.tfstate"), VersionId: sdkaws.String("v1")},
-		{Key: sdkaws.String("state.tfstate"), VersionId: sdkaws.String("v2")},
+		{Key: sdkaws.String(testNukeFallbackStateKey), VersionId: sdkaws.String("v1")},
+		{Key: sdkaws.String(testNukeFallbackStateKey), VersionId: sdkaws.String("v2")},
 	}
 	markers := []s3types.DeleteMarkerEntry{
-		{Key: sdkaws.String("state.tfstate"), VersionId: sdkaws.String("m1")},
+		{Key: sdkaws.String(testNukeFallbackStateKey), VersionId: sdkaws.String("m1")},
 	}
 	deletedVersions, deletedMarkers, err := deleteStateVersionsAndMarkers(context.Background(), mock, cfg, versions, markers)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if deletedVersions != 2 {
 		t.Fatalf("expected 2 deleted versions, got %d", deletedVersions)
@@ -197,9 +203,9 @@ func TestDeleteStateVersionsAndMarkersVersionDeleteError(t *testing.T) {
 			return nil, errors.New("delete failed")
 		},
 	}
-	cfg := nukeBackendStateConfig{BucketName: "bucket", TableName: "table", StateKey: "state.tfstate"}
+	cfg := nukeBackendStateConfig{BucketName: "bucket", TableName: "table", StateKey: testNukeFallbackStateKey}
 	versions := []s3types.ObjectVersion{
-		{Key: sdkaws.String("state.tfstate"), VersionId: sdkaws.String("v1")},
+		{Key: sdkaws.String(testNukeFallbackStateKey), VersionId: sdkaws.String("v1")},
 	}
 	_, _, err := deleteStateVersionsAndMarkers(context.Background(), mock, cfg, versions, nil)
 	if err == nil {
@@ -220,9 +226,9 @@ func TestDeleteStateVersionsAndMarkersMarkerDeleteError(t *testing.T) {
 			return nil, errors.New("delete failed")
 		},
 	}
-	cfg := nukeBackendStateConfig{BucketName: "bucket", TableName: "table", StateKey: "state.tfstate"}
+	cfg := nukeBackendStateConfig{BucketName: "bucket", TableName: "table", StateKey: testNukeFallbackStateKey}
 	markers := []s3types.DeleteMarkerEntry{
-		{Key: sdkaws.String("state.tfstate"), VersionId: sdkaws.String("m1")},
+		{Key: sdkaws.String(testNukeFallbackStateKey), VersionId: sdkaws.String("m1")},
 	}
 	_, _, err := deleteStateVersionsAndMarkers(context.Background(), mock, cfg, nil, markers)
 	if err == nil {
@@ -247,7 +253,7 @@ func TestDeleteLockRowsEmptyItems(t *testing.T) {
 	}
 	deleted, err := deleteLockRows(context.Background(), mock, "my-table", nil)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if deleted != 0 {
 		t.Fatalf("expected 0 deleted, got %d", deleted)
@@ -270,12 +276,12 @@ func TestDeleteLockRowsDeletesItemsWithLockID(t *testing.T) {
 		},
 	}
 	items := []map[string]dbtypes.AttributeValue{
-		{"LockID": &dbtypes.AttributeValueMemberS{Value: "lock-1"}},
+		{"LockID": &dbtypes.AttributeValueMemberS{Value: testNukeFallbackLockID}},
 		{"LockID": &dbtypes.AttributeValueMemberS{Value: "lock-2"}},
 	}
 	deleted, err := deleteLockRows(context.Background(), mock, "my-table", items)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if deleted != 2 {
 		t.Fatalf("expected 2 deleted, got %d", deleted)
@@ -302,11 +308,11 @@ func TestDeleteLockRowsSkipsItemsWithNoLockID(t *testing.T) {
 	}
 	items := []map[string]dbtypes.AttributeValue{
 		{"OtherField": &dbtypes.AttributeValueMemberS{Value: "val"}},
-		{"LockID": &dbtypes.AttributeValueMemberS{Value: "lock-1"}},
+		{"LockID": &dbtypes.AttributeValueMemberS{Value: testNukeFallbackLockID}},
 	}
 	deleted, err := deleteLockRows(context.Background(), mock, "my-table", items)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if deleted != 1 {
 		t.Fatalf("expected 1 deleted (skipping item without LockID), got %d", deleted)
@@ -330,7 +336,7 @@ func TestDeleteLockRowsDeleteError(t *testing.T) {
 		},
 	}
 	items := []map[string]dbtypes.AttributeValue{
-		{"LockID": &dbtypes.AttributeValueMemberS{Value: "lock-1"}},
+		{"LockID": &dbtypes.AttributeValueMemberS{Value: testNukeFallbackLockID}},
 	}
 	_, err := deleteLockRows(context.Background(), mock, "my-table", items)
 	if err == nil {
@@ -352,7 +358,7 @@ func TestDeleteLockRowsNotFoundTreatedAsDeleted(t *testing.T) {
 		},
 	}
 	items := []map[string]dbtypes.AttributeValue{
-		{"LockID": &dbtypes.AttributeValueMemberS{Value: "lock-1"}},
+		{"LockID": &dbtypes.AttributeValueMemberS{Value: testNukeFallbackLockID}},
 	}
 	deleted, err := deleteLockRows(context.Background(), mock, "my-table", items)
 	if err != nil {
@@ -368,10 +374,10 @@ func TestDeleteLockRowsNotFoundTreatedAsDeleted(t *testing.T) {
 func TestBackupBackendStateDataEmptyInputReturnsEmpty(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	cfg := nukeBackendStateConfig{BucketName: "bucket", TableName: "table", StateKey: "state.tfstate"}
-	targetDir, err := backupBackendStateData(context.Background(), nil, nil, cfg, nil, nil, nil, dir)
+	cfg := nukeBackendStateConfig{BucketName: "bucket", TableName: "table", StateKey: testNukeFallbackStateKey}
+	targetDir, err := backupBackendStateData(context.Background(), nil, cfg, nil, nil, nil, dir)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if targetDir != "" {
 		t.Fatalf("expected empty targetDir for empty input, got: %s", targetDir)
@@ -404,12 +410,12 @@ func TestBackupBackendStateDataWithStateVersionsCreatesBackup(t *testing.T) {
 	stateVersions := []s3types.ObjectVersion{
 		{Key: sdkaws.String(stateKey), VersionId: sdkaws.String("v1")},
 	}
-	targetDir, err := backupBackendStateData(context.Background(), s3Mock, nil, cfg, stateVersions, nil, nil, dir)
+	targetDir, err := backupBackendStateData(context.Background(), s3Mock, cfg, stateVersions, nil, nil, dir)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if targetDir == "" {
-		t.Fatal("expected non-empty targetDir")
+		t.Fatal(testExpectedNonEmptyTargetDir)
 	}
 	if _, statErr := os.Stat(targetDir); statErr != nil {
 		t.Fatalf("backup dir not created: %v", statErr)
@@ -424,16 +430,16 @@ func TestBackupBackendStateDataWithStateVersionsCreatesBackup(t *testing.T) {
 func TestBackupBackendStateDataWithLockItemsCreatesBackup(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	cfg := nukeBackendStateConfig{BucketName: "bucket", TableName: "table", StateKey: "state.tfstate"}
+	cfg := nukeBackendStateConfig{BucketName: "bucket", TableName: "table", StateKey: testNukeFallbackStateKey}
 	lockItems := []map[string]dbtypes.AttributeValue{
 		{"LockID": &dbtypes.AttributeValueMemberS{Value: "lock-123"}},
 	}
-	targetDir, err := backupBackendStateData(context.Background(), nil, nil, cfg, nil, nil, lockItems, dir)
+	targetDir, err := backupBackendStateData(context.Background(), nil, cfg, nil, nil, lockItems, dir)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if targetDir == "" {
-		t.Fatal("expected non-empty targetDir")
+		t.Fatal(testExpectedNonEmptyTargetDir)
 	}
 	lockBackupPath := filepath.Join(targetDir, "dynamodb", "lock-items.json")
 	data, readErr := os.ReadFile(lockBackupPath)
@@ -466,12 +472,12 @@ func TestBackupBackendStateDataWithDeleteMarkers(t *testing.T) {
 	deleteMarkers := []s3types.DeleteMarkerEntry{
 		{Key: sdkaws.String(stateKey), VersionId: sdkaws.String("m1")},
 	}
-	targetDir, err := backupBackendStateData(context.Background(), s3Mock, nil, cfg, nil, deleteMarkers, nil, dir)
+	targetDir, err := backupBackendStateData(context.Background(), s3Mock, cfg, nil, deleteMarkers, nil, dir)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if targetDir == "" {
-		t.Fatal("expected non-empty targetDir")
+		t.Fatal(testExpectedNonEmptyTargetDir)
 	}
 	manifestPath := filepath.Join(targetDir, "s3", "manifest.json")
 	if _, statErr := os.Stat(manifestPath); statErr != nil {

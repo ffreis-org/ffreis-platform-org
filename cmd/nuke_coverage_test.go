@@ -10,6 +10,8 @@ import (
 	dbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 )
 
+const testUnknownResourceType = "unknown/type"
+
 // --- existsByAPICall ---
 
 func TestExistsByAPICallReturnsExistsWhenNoError(t *testing.T) {
@@ -38,8 +40,8 @@ func TestExistsByAPICallReturnsErrorOnOtherError(t *testing.T) {
 
 func TestNukeCleanupTargetRankSchedulerFirst(t *testing.T) {
 	schedRank := nukeCleanupTargetRank(auditResource{resourceType: "scheduler/schedule"})
-	orgRank := nukeCleanupTargetRank(auditResource{resourceType: "organizations/organization"})
-	defaultRank := nukeCleanupTargetRank(auditResource{resourceType: "unknown/type"})
+	orgRank := nukeCleanupTargetRank(auditResource{resourceType: resourceTypeOrganizationsOrganization})
+	defaultRank := nukeCleanupTargetRank(auditResource{resourceType: testUnknownResourceType})
 
 	if schedRank >= orgRank {
 		t.Fatalf("scheduler/schedule should have lower rank than organizations/organization: %d vs %d", schedRank, orgRank)
@@ -65,7 +67,7 @@ func TestNukeCleanupTargetRankAllKnownTypes(t *testing.T) {
 		resourceTypeOrganizationsPolicy,
 		"organizations/account",
 		"organizations/organizational-unit",
-		"organizations/organization",
+		resourceTypeOrganizationsOrganization,
 	}
 	// All known types should return a rank < 20 (the default).
 	for _, rt := range types {
@@ -80,15 +82,15 @@ func TestNukeCleanupTargetRankAllKnownTypes(t *testing.T) {
 
 func TestNukeCleanupTargetLessByRank(t *testing.T) {
 	a := auditResource{resourceType: "scheduler/schedule", name: "z"}
-	b := auditResource{resourceType: "organizations/organization", name: "a"}
+	b := auditResource{resourceType: resourceTypeOrganizationsOrganization, name: "a"}
 	if !nukeCleanupTargetLess(a, b) {
 		t.Fatal("scheduler/schedule should sort before organizations/organization")
 	}
 }
 
 func TestNukeCleanupTargetLessByNameWhenSameRankAndType(t *testing.T) {
-	a := auditResource{resourceType: "unknown/type", name: "a"}
-	b := auditResource{resourceType: "unknown/type", name: "z"}
+	a := auditResource{resourceType: testUnknownResourceType, name: "a"}
+	b := auditResource{resourceType: testUnknownResourceType, name: "z"}
 	if !nukeCleanupTargetLess(a, b) {
 		t.Fatal("'a' should sort before 'z' when type and rank are equal")
 	}
