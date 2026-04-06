@@ -425,6 +425,47 @@ func TestDeletePendingSchedulesRemovesAllSchedulesInGroup(t *testing.T) {
 	}
 }
 
+func testManagedResourceListCalls(maxCalls int) func(context.Context) ([]auditResource, error) {
+	var calls int
+	return func(context.Context) ([]auditResource, error) {
+		calls++
+		if calls <= maxCalls {
+			return []auditResource{{status: "OK", resourceType: "s3", name: testTFStateRuntimeName, stack: testPlatformOrgStack}}, nil
+		}
+		return nil, nil
+	}
+}
+
+func testManagedFallbackRunner(t *testing.T, called *bool) func(context.Context, *commandOutput, []auditResource, bool) (nukeFallbackSummary, error) {
+	t.Helper()
+	return func(_ context.Context, _ *commandOutput, resources []auditResource, force bool) (nukeFallbackSummary, error) {
+		*called = true
+		if !force {
+			t.Fatal("fallback cleanup should always run with force=true")
+		}
+		if len(resources) != 1 || resources[0].name != testTFStateRuntimeName {
+			t.Fatalf("unexpected fallback resources: %+v", resources)
+		}
+		return nukeFallbackSummary{Deleted: 1}, nil
+	}
+}
+
+func testBackendResetter(t *testing.T, called *bool, root, stack string) func(context.Context, string, string, string, string) (nukeBackendResetSummary, error) {
+	t.Helper()
+	return func(_ context.Context, gotRoot, gotStack, gotEnv, _ string) (nukeBackendResetSummary, error) {
+		*called = true
+		if gotRoot != root || gotStack != stack || gotEnv != testEnv {
+			t.Fatalf(errUnexpectedResetArgs, gotRoot, gotStack, gotEnv)
+		}
+		return nukeBackendResetSummary{
+			BucketName:            "ffreis-tf-state-root",
+			TableName:             "ffreis-tf-locks-root",
+			StateKey:              testPlatformOrgStateKey,
+			RemovedLocalTerraform: true,
+		}, nil
+	}
+}
+
 func TestNukeCommandFallsBackWhenDestroyLeavesManagedResources(t *testing.T) {
 	d.log = newLogger("error")
 	d.env = testEnv
@@ -476,51 +517,17 @@ func TestNukeCommandFallsBackWhenDestroyLeavesManagedResources(t *testing.T) {
 		return nil
 	}
 
-	var scanCalls int
-	scanManagedPlatformOrgResourcesNukeFn = func(context.Context) ([]auditResource, error) {
-		scanCalls++
-		if scanCalls == 1 {
-			return []auditResource{{status: "OK", resourceType: "s3", name: testTFStateRuntimeName, stack: testPlatformOrgStack}}, nil
-		}
-		return nil, nil
-	}
-	var targetCalls int
-	platformOrgCleanupTargetsForNukeFn = func(context.Context) ([]auditResource, error) {
-		targetCalls++
-		if targetCalls <= 2 {
-			return []auditResource{{status: "OK", resourceType: "s3", name: testTFStateRuntimeName, stack: testPlatformOrgStack}}, nil
-		}
-		return nil, nil
-	}
+	scanManagedPlatformOrgResourcesNukeFn = testManagedResourceListCalls(1)
+	platformOrgCleanupTargetsForNukeFn = testManagedResourceListCalls(2)
 	platformOrgDoctorRunFn = func(context.Context, platformOrgDoctorMode) (PlatformOrgDoctorReport, error) {
 		return PlatformOrgDoctorReport{Summary: platformOrgDoctorSummary{OK: 1, Total: 1}}, nil
 	}
 
 	fallbackCalled := false
-	runManagedSDKFallbackNukeFn = func(_ context.Context, _ *commandOutput, resources []auditResource, force bool) (nukeFallbackSummary, error) {
-		fallbackCalled = true
-		if !force {
-			t.Fatal("fallback cleanup should always run with force=true")
-		}
-		if len(resources) != 1 || resources[0].name != testTFStateRuntimeName {
-			t.Fatalf("unexpected fallback resources: %+v", resources)
-		}
-		return nukeFallbackSummary{Deleted: 1}, nil
-	}
+	runManagedSDKFallbackNukeFn = testManagedFallbackRunner(t, &fallbackCalled)
 
 	resetCalled := false
-	resetBackendStateForNukeFn = func(_ context.Context, gotRoot, gotStack, gotEnv, gotBackupDir string) (nukeBackendResetSummary, error) {
-		resetCalled = true
-		if gotRoot != root || gotStack != stack || gotEnv != testEnv {
-			t.Fatalf(errUnexpectedResetArgs, gotRoot, gotStack, gotEnv)
-		}
-		return nukeBackendResetSummary{
-			BucketName:            "ffreis-tf-state-root",
-			TableName:             "ffreis-tf-locks-root",
-			StateKey:              testPlatformOrgStateKey,
-			RemovedLocalTerraform: true,
-		}, nil
-	}
+	resetBackendStateForNukeFn = testBackendResetter(t, &resetCalled, root, stack)
 
 	if err := nukeCmd.RunE(nukeCmd, nil); err != nil {
 		t.Fatalf("nukeCmd.RunE fallback path: %v", err)

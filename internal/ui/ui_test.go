@@ -61,6 +61,23 @@ func TestNewPlainAndInvalid(t *testing.T) {
 	}
 }
 
+func assertResolveModeResult(t *testing.T, wantErr, gotMode string, gotInteractive bool, err error, wantMode string, wantInteract bool) {
+	t.Helper()
+
+	if wantErr != "" {
+		if err == nil || !strings.Contains(err.Error(), wantErr) {
+			t.Fatalf("expected error containing %q, got %v", wantErr, err)
+		}
+		return
+	}
+	if err != nil {
+		t.Fatalf("ResolveMode: %v", err)
+	}
+	if gotMode != wantMode || gotInteractive != wantInteract {
+		t.Fatalf("ResolveMode() = (%q, %v), want (%q, %v)", gotMode, gotInteractive, wantMode, wantInteract)
+	}
+}
+
 func TestResolveMode(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -85,18 +102,7 @@ func TestResolveMode(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			gotMode, gotInteractive, err := ResolveMode(tc.requested, tc.stdoutTTY, tc.stderrTTY, tc.disableColor)
-			if tc.wantErr != "" {
-				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
-					t.Fatalf("expected error containing %q, got %v", tc.wantErr, err)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("ResolveMode: %v", err)
-			}
-			if gotMode != tc.wantMode || gotInteractive != tc.wantInteract {
-				t.Fatalf("ResolveMode() = (%q, %v), want (%q, %v)", gotMode, gotInteractive, tc.wantMode, tc.wantInteract)
-			}
+			assertResolveModeResult(t, tc.wantErr, gotMode, gotInteractive, err, tc.wantMode, tc.wantInteract)
 		})
 	}
 }
@@ -179,6 +185,12 @@ func assertKeyHeaderSummaryBadgeStatus(t *testing.T, plain, rich *Presenter) {
 	if got := plain.Summary("Result"); got != "Result" {
 		t.Fatalf("Summary without parts = %q", got)
 	}
+
+	assertBadgeAndStatus(t, plain, rich)
+}
+
+func assertBadgeAndStatus(t *testing.T, plain, rich *Presenter) {
+	t.Helper()
 
 	if got := plain.Badge("warn", " WARN "); got != "[warn]" {
 		t.Fatalf("Badge plain = %q", got)

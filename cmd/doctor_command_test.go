@@ -415,7 +415,7 @@ func TestPlatformOrgStateDoctorSectionSuccessAndLiveScanFailure(t *testing.T) {
 			t.Fatalf("platformOrgStateDoctorSection: %v", err)
 		}
 		if section.Title != tfStateIntegrityTitle || len(section.Checks) < 2 {
-			t.Fatalf("unexpected section: %+v", section)
+			t.Fatalf(testDoctorCommandUnexpectedSectionf, section)
 		}
 		if section.Checks[0].Status != "ok" {
 			t.Fatalf("expected summary check ok, got %+v", section.Checks[0])
@@ -494,7 +494,7 @@ func TestPlatformOrgRuntimeDoctorSectionSuccess(t *testing.T) {
 		t.Fatalf("platformOrgRuntimeDoctorSection: %v", err)
 	}
 	if section.Title != "Runtime Wiring" || len(section.Checks) != 5 {
-		t.Fatalf("unexpected section: %+v", section)
+		t.Fatalf(testDoctorCommandUnexpectedSectionf, section)
 	}
 	for _, check := range section.Checks {
 		if check.Status != "ok" {

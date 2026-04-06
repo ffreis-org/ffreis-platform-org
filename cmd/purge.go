@@ -152,66 +152,62 @@ func lightsailToCloudControl(resourceType, name string) (string, string) {
 	return "", ""
 }
 
+type cloudControlMapping struct {
+	cfnType string
+	useARN  bool
+}
+
+func (mapping cloudControlMapping) identifier(name, arn string) string {
+	if mapping.useARN {
+		return arn
+	}
+	return name
+}
+
+func cloudControlServiceMapping(service string) (cloudControlMapping, bool) {
+	mapping, ok := map[string]cloudControlMapping{
+		"s3":  {cfnType: "AWS::S3::Bucket"},
+		"sns": {cfnType: "AWS::SNS::Topic", useARN: true},
+		"sqs": {cfnType: "AWS::SQS::Queue", useARN: true},
+	}[service]
+	return mapping, ok
+}
+
+func cloudControlTypedMapping(service, resourceType string) (cloudControlMapping, bool) {
+	mapping, ok := map[string]cloudControlMapping{
+		"dynamodb|dynamodb/table":              {cfnType: "AWS::DynamoDB::Table"},
+		"lambda|lambda/function":               {cfnType: "AWS::Lambda::Function"},
+		"ecr|ecr/repository":                   {cfnType: "AWS::ECR::Repository"},
+		"logs|logs/log-group":                  {cfnType: "AWS::Logs::LogGroup"},
+		"secretsmanager|secretsmanager/secret": {cfnType: "AWS::SecretsManager::Secret", useARN: true},
+		"ssm|ssm/parameter":                    {cfnType: "AWS::SSM::Parameter"},
+		"kms|kms/key":                          {cfnType: "AWS::KMS::Key"},
+		"elasticloadbalancing|elasticloadbalancing/loadbalancer": {cfnType: "AWS::ElasticLoadBalancingV2::LoadBalancer", useARN: true},
+		"events|events/rule":                          {cfnType: "AWS::Events::Rule"},
+		"sagemaker|sagemaker/notebook-instance":       {cfnType: "AWS::SageMaker::NotebookInstance"},
+		"servicediscovery|servicediscovery/namespace": {cfnType: "AWS::ServiceDiscovery::PrivateDnsNamespace"},
+	}[service+"|"+resourceType]
+	return mapping, ok
+}
+
 // arnToCloudControl maps a parsed ARN (service, resourceType, name) to the
 // CloudFormation type name and primary identifier expected by Cloud Control API.
 func arnToCloudControl(arn, service, resourceType, name string) (cfnType, identifier string) {
+	if mapping, ok := cloudControlServiceMapping(service); ok {
+		return mapping.cfnType, mapping.identifier(name, arn)
+	}
+
+	if mapping, ok := cloudControlTypedMapping(service, resourceType); ok {
+		return mapping.cfnType, mapping.identifier(name, arn)
+	}
+
 	switch service {
-	case "s3":
-		return "AWS::S3::Bucket", name
-	case "dynamodb":
-		if resourceType == "dynamodb/table" {
-			return "AWS::DynamoDB::Table", name
-		}
-	case "sns":
-		return "AWS::SNS::Topic", arn
-	case "sqs":
-		return "AWS::SQS::Queue", arn
 	case "iam":
 		return iamToCloudControl(resourceType, name, arn)
-	case "lambda":
-		if resourceType == "lambda/function" {
-			return "AWS::Lambda::Function", name
-		}
-	case "ecr":
-		if resourceType == "ecr/repository" {
-			return "AWS::ECR::Repository", name
-		}
-	case "logs":
-		if resourceType == "logs/log-group" {
-			return "AWS::Logs::LogGroup", name
-		}
-	case "secretsmanager":
-		if resourceType == "secretsmanager/secret" {
-			return "AWS::SecretsManager::Secret", arn
-		}
-	case "ssm":
-		if resourceType == "ssm/parameter" {
-			return "AWS::SSM::Parameter", name
-		}
-	case "kms":
-		if resourceType == "kms/key" {
-			return "AWS::KMS::Key", name
-		}
-	case "elasticloadbalancing":
-		if resourceType == "elasticloadbalancing/loadbalancer" {
-			return "AWS::ElasticLoadBalancingV2::LoadBalancer", arn
-		}
 	case "ecs":
 		return ecsToCloudControl(resourceType, name, arn)
 	case "ec2":
 		return ec2ToCloudControl(resourceType, name)
-	case "events":
-		if resourceType == "events/rule" {
-			return "AWS::Events::Rule", name
-		}
-	case "sagemaker":
-		if resourceType == "sagemaker/notebook-instance" {
-			return "AWS::SageMaker::NotebookInstance", name
-		}
-	case "servicediscovery":
-		if resourceType == "servicediscovery/namespace" {
-			return "AWS::ServiceDiscovery::PrivateDnsNamespace", name
-		}
 	case "lightsail":
 		return lightsailToCloudControl(resourceType, name)
 	}

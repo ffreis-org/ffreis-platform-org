@@ -177,7 +177,7 @@ func TestCountBucketVersionsPaginates(t *testing.T) {
 	}
 	plan := runtimeStateBackupPlan{BucketName: testNukeBackupBucketName}
 	if err := countBucketVersions(context.Background(), mock, &plan); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if calls != 2 {
 		t.Fatalf("expected 2 list calls for pagination, got %d", calls)
@@ -495,7 +495,7 @@ func TestBackupBucketVersionsPaginates(t *testing.T) {
 	}
 	metadata, err := backupBucketVersions(context.Background(), mock, testNukeBackupBucketName, dir)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if calls != 2 {
 		t.Fatalf("expected 2 list calls, got %d", calls)
@@ -528,7 +528,7 @@ func TestBackupBucketVersionsIncludesDeleteMarkers(t *testing.T) {
 	}
 	metadata, err := backupBucketVersions(context.Background(), mock, testNukeBackupBucketName, dir)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if len(metadata) != 2 {
 		t.Fatalf("expected 2 metadata entries (1 version + 1 marker), got %d", len(metadata))
@@ -570,7 +570,7 @@ func TestBackupDynamoTableWritesItems(t *testing.T) {
 		},
 	}
 	if err := backupDynamoTable(context.Background(), mock, testNukeBackupTableName, target); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	data, err := os.ReadFile(target)
 	if err != nil {
@@ -609,7 +609,7 @@ func TestBackupDynamoTablePaginates(t *testing.T) {
 		},
 	}
 	if err := backupDynamoTable(context.Background(), mock, testNukeBackupTableName, target); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if calls != 2 {
 		t.Fatalf("expected 2 scan calls, got %d", calls)
