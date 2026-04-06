@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/mattn/go-isatty"
 )
 
 const (
@@ -92,11 +93,7 @@ func IsTTY(f *os.File) bool {
 	if f == nil {
 		return false
 	}
-	info, err := f.Stat()
-	if err != nil {
-		return false
-	}
-	return (info.Mode() & os.ModeCharDevice) != 0
+	return isatty.IsTerminal(f.Fd())
 }
 
 func WithPresenter(ctx context.Context, presenter *Presenter) context.Context {

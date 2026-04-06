@@ -120,8 +120,8 @@ func TestIsTTY(t *testing.T) {
 		t.Fatalf("Open(%q): %v", os.DevNull, err)
 	}
 	defer devNull.Close()
-	if !IsTTY(devNull) {
-		t.Fatal("expected os.DevNull to be a character device on this platform")
+	if IsTTY(devNull) {
+		t.Fatal("os.DevNull is a character device but not an interactive terminal")
 	}
 }
 
