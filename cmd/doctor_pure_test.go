@@ -130,11 +130,11 @@ func TestDoctorCheckBackendStateObject(t *testing.T) {
 	cfg := nukeBackendStateConfig{BucketName: "my-bucket", TableName: "my-table", StateKey: "platform-org/prod/terraform.tfstate"}
 
 	tests := []struct {
-		name       string
-		count      int
-		stateErr   error
-		wantStat   string
-		blocking   bool
+		name     string
+		count    int
+		stateErr error
+		wantStat string
+		blocking bool
 	}{
 		{"error", 0, errors.New("s3 error"), "fail", true},
 		{"zero versions", 0, nil, "info", false},
@@ -162,12 +162,12 @@ func TestDoctorCheckBackendLockRows(t *testing.T) {
 	cfg := nukeBackendStateConfig{BucketName: "b", TableName: "t", StateKey: "k"}
 
 	tests := []struct {
-		name          string
-		lockCount     int
-		stateCount    int
-		lockErr       error
-		wantStat      string
-		blocking      bool
+		name       string
+		lockCount  int
+		stateCount int
+		lockErr    error
+		wantStat   string
+		blocking   bool
 	}{
 		{"error", 0, 0, errors.New("dynamo error"), "fail", true},
 		{"orphaned lock (lock > 0, state == 0)", 1, 0, nil, "fail", true},

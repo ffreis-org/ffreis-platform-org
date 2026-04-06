@@ -8,9 +8,9 @@ import (
 	"testing"
 
 	sdkaws "github.com/aws/aws-sdk-go-v2/aws"
+	taggingtypes "github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi/types"
 	"github.com/aws/aws-sdk-go-v2/service/scheduler"
 	schedulertypes "github.com/aws/aws-sdk-go-v2/service/scheduler/types"
-	taggingtypes "github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi/types"
 )
 
 // ---------------------------------------------------------------------------
