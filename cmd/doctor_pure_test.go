@@ -3,9 +3,9 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	lambdatypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
 	schedulertypes "github.com/aws/aws-sdk-go-v2/service/scheduler/types"
@@ -522,24 +522,11 @@ func TestDoctorExistsDetail(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			got := existsDetail(tc.exists, tc.err, tc.label, tc.resname)
-			if !contains(got, tc.wantSub) {
+			if !strings.Contains(got, tc.wantSub) {
 				t.Errorf("got %q, want substring %q", got, tc.wantSub)
 			}
 		})
 	}
-}
-
-func contains(s, sub string) bool {
-	return len(sub) == 0 || (len(s) >= len(sub) && (s == sub || len(s) > 0 && containsStr(s, sub)))
-}
-
-func containsStr(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
 
 // ---------------------------------------------------------------------------
@@ -1014,7 +1001,7 @@ func TestDoctorCheckRuntimeActivationScheduleDetailPrefix(t *testing.T) {
 	roleARN := "arn:aws:iam::123:role/myorg-scheduler-invoke-activate"
 	s := perfectSchedule(org, lambdaARN, roleARN)
 	got := checkRuntimeActivationSchedule(s, org, lambdaARN, roleARN)
-	if !containsStr(got.Detail, "schedule present") {
+	if !strings.Contains(got.Detail, "schedule present") {
 		t.Errorf("Detail should start with 'schedule present', got: %s", got.Detail)
 	}
 }
@@ -1028,7 +1015,7 @@ func TestDoctorCheckRuntimeLambdaEnvironmentMismatchDetail(t *testing.T) {
 	wrong := "arn:aws:sns:us-east-1:123:wrong-topic"
 	out := lambdaOutputWithEnv(map[string]string{"PLATFORM_EVENTS_TOPIC_ARN": wrong})
 	got := checkRuntimeLambdaEnvironment(out, nil, "fn", topicARN)
-	if !containsStr(got.Detail, wrong) || !containsStr(got.Detail, topicARN) {
+	if !strings.Contains(got.Detail, wrong) || !strings.Contains(got.Detail, topicARN) {
 		t.Errorf("detail should mention both ARNs, got: %s", got.Detail)
 	}
 }
@@ -1130,6 +1117,3 @@ func TestDoctorCheckRuntimeSchedulerRolePolicyKey(t *testing.T) {
 		t.Errorf("Title=%q want %q", got.Title, runtimeSchedulerRolePolicyTitle)
 	}
 }
-
-// ensure lambda import is used
-var _ = aws.String
