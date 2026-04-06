@@ -1,0 +1,71 @@
+name: DevOps / Terraform Checks
+
+on:
+  pull_request:
+    paths:
+      - "terraform/**"
+      - ".tflint.hcl"
+      - ".github/workflows/**"
+  push:
+    branches: [main, master]
+    paths:
+      - "terraform/**"
+      - ".tflint.hcl"
+      - ".github/workflows/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fmt:
+    uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-fmt.yml@e0cd54322d52fe7c522dd0bc2c46d56df2ceae43
+    with:
+      working-directory: "terraform"
+
+  validate:
+    uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-validate.yml@e0cd54322d52fe7c522dd0bc2c46d56df2ceae43
+    needs: [fmt]
+    with:
+      chdir: "terraform/stack"
+      validate-all-modules: true
+      modules-dir: "terraform/modules"
+
+  lint:
+    uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-lint.yml@e0cd54322d52fe7c522dd0bc2c46d56df2ceae43
+    needs: [fmt]
+    with:
+      lint-path: "terraform"
+      tflint-config: ".tflint.hcl"
+
+  trivy-config:
+    uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-security.yml@e0cd54322d52fe7c522dd0bc2c46d56df2ceae43
+    needs: [fmt]
+    with:
+      scan-ref: "terraform"
+
+  tfsec:
+    uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-tfsec.yml@e0cd54322d52fe7c522dd0bc2c46d56df2ceae43
+    needs: [fmt]
+    with:
+      scan-path: "terraform"
+      minimum-severity: "HIGH"
+      soft-fail: false
+
+  checkov:
+    uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-checkov.yml@e0cd54322d52fe7c522dd0bc2c46d56df2ceae43
+    needs: [fmt]
+    with:
+      scan-directory: "terraform"
+      framework: "terraform"
+      soft-fail: false
+
+  semgrep:
+    uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-semgrep.yml@e0cd54322d52fe7c522dd0bc2c46d56df2ceae43
+    needs: [fmt]
+    with:
+      working-directory: "terraform"
+      config: "p/terraform"

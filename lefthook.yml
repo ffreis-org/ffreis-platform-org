@@ -1,0 +1,36 @@
+pre-commit:
+  parallel: true
+  commands:
+    hygiene-merge-markers:
+      run: ./scripts/hooks/check_merge_markers.sh
+    hygiene-large-files:
+      run: ./scripts/hooks/check_large_files.sh
+    hygiene-binary-files:
+      run: ./scripts/hooks/check_binary_files.sh
+    go-mod-drift:
+      run: ./scripts/hooks/check_go_mod_drift.sh
+    fmt-check:
+      run: make fmt-check
+    lint:
+      glob: "**/*.tf"
+      run: ./scripts/hooks/run_tflint_if_available.sh
+    validate:
+      glob: "**/*.tf"
+      run: ./scripts/hooks/validate_terraform.sh
+    secret-scan:
+      run: make secrets-scan-staged
+
+pre-push:
+  parallel: false
+  commands:
+    go-test:
+      run: make go-test
+    lint:
+      run: ./scripts/hooks/run_tflint_if_available.sh
+    validate:
+      run: make validate
+
+commit-msg:
+  commands:
+    conventional-commits:
+      run: ./scripts/hooks/check_commit_msg.sh {1}

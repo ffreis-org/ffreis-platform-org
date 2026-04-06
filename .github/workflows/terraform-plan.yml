@@ -1,0 +1,24 @@
+name: Terraform Plan
+
+# Manual-only Terraform plan workflow.
+# No automatic PR execution.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: terraform-plan-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  id-token: write        # Required for OIDC token exchange
+  contents: read
+  pull-requests: write   # Required to post plan comment
+
+jobs:
+  plan-prod:
+    uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-plan.yml@e0cd54322d52fe7c522dd0bc2c46d56df2ceae43
+    with:
+      environment: "prod"
+      chdir: "terraform/stack"
+    secrets: inherit

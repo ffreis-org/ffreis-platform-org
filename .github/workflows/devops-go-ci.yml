@@ -1,0 +1,72 @@
+name: DevOps / Go CI
+
+on:
+  pull_request:
+    paths:
+      - "**/*.go"
+      - "go.mod"
+      - "go.sum"
+      - ".github/workflows/**"
+  push:
+    branches: [main, master]
+    paths:
+      - "**/*.go"
+      - "go.mod"
+      - "go.sum"
+      - ".github/workflows/**"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mod-tidy:
+    permissions:
+      contents: read
+    uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-mod-tidy-check.yml@ed2f7d29467bf1fd6ec40df3953b3ee128ba3f04
+    with:
+      go-version: "1.25.8"
+      working-directory: "."
+
+  fmt:
+    permissions:
+      contents: read
+    uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-fmt.yml@ed2f7d29467bf1fd6ec40df3953b3ee128ba3f04
+    with:
+      go-version: "1.25.8"
+      working-directory: "."
+
+  lint:
+    needs: [fmt]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.8"
+          cache: true
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@55c2c1448f86e01eaae002a5a3a9624417608d84
+        with:
+          version: v1.64.8
+          install-mode: goinstall
+          args: --path-prefix=. --timeout=5m
+
+  test:
+    needs: [fmt]
+    permissions:
+      contents: read
+    uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-test.yml@ed2f7d29467bf1fd6ec40df3953b3ee128ba3f04
+    with:
+      go-version: "1.25.8"
+      working-directory: "."

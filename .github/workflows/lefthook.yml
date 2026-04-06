@@ -1,0 +1,24 @@
+name: Lefthook
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lefthook:
+    uses: FelipeFuhr/ffreis-workflows-general/.github/workflows/general-lefthook.yml@c3e3e0a44d4b79697f1babaa9bf287d1b264da52
+    with:
+      working-directory: "."
+      go-version-file: "go.mod"
+      install-govulncheck: true
+      lefthook-bootstrap-command: "make lefthook-bootstrap"
+      lefthook-bin: ".bin/lefthook"

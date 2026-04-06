@@ -1,0 +1,102 @@
+name: Code Quality (SonarCloud)
+
+on:
+  pull_request:
+    paths:
+      - "**/*.go"
+      - "go.mod"
+      - "go.sum"
+      - "terraform/**"
+      - ".github/workflows/**"
+      - "sonar-project.properties"
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sonar:
+    name: SonarCloud
+    runs-on: ubuntu-latest
+    if: vars.SONAR_ENABLED != 'false' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false)
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Verify SonarCloud configuration
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          missing=""
+          if [ -z "${SONAR_TOKEN}" ]; then
+            missing="${missing}  • SONAR_TOKEN (secret): your SonarCloud token — sonarcloud.io → My Account → Security\n"
+          fi
+          if [ -n "${missing}" ]; then
+            echo "::error title=SonarCloud not configured::Missing configuration:"
+            printf "%b" "${missing}"
+            echo ""
+            echo "Add secrets: Settings → Secrets and variables → Actions → New repository secret"
+            echo "Add variables: Settings → Secrets and variables → Actions → Variables tab"
+            echo "To skip this job entirely: Settings → Variables → add SONAR_ENABLED=false"
+            exit 1
+          fi
+
+      - name: Prepare SonarCloud arguments
+        id: sonar-args
+        env:
+          SONAR_ORGANIZATION: ${{ vars.SONAR_ORGANIZATION }}
+          SONAR_PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          file_org="$(sed -n 's/^sonar\.organization=//p' sonar-project.properties | head -n1)"
+          file_project_key="$(sed -n 's/^sonar\.projectKey=//p' sonar-project.properties | head -n1)"
+
+          org="${SONAR_ORGANIZATION:-${file_org:-felipefuhr}}"
+          org="$(printf '%s' "${org}" | tr '[:upper:]' '[:lower:]')"
+
+          repo_name="${GITHUB_REPOSITORY#*/}"
+          project_key="${SONAR_PROJECT_KEY:-${file_project_key:-${GITHUB_REPOSITORY_OWNER}_${repo_name}}}"
+          base_ref="${BASE_REF:-main}"
+
+          {
+            echo "args<<EOF"
+            echo "-Dsonar.projectKey=${project_key}"
+            echo "-Dsonar.organization=${org}"
+            echo "-Dsonar.newCode.referenceBranch=${base_ref}"
+            echo "-Dsonar.go.coverage.reportPaths=coverage.out"
+            echo "-Dsonar.sources=."
+            echo "-Dsonar.exclusions=vendor/**,**/*_test.go"
+            echo "-Dsonar.tests=."
+            echo "-Dsonar.test.inclusions=**/*_test.go"
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Generate coverage for SonarCloud
+        run: |
+          go test ./... \
+            -coverprofile=coverage.out \
+            -covermode=atomic \
+            -count=1 \
+            -timeout=120s
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarqube-scan-action@a31c9398be7ace6bbfaf30c0bd5d415f843d45e9 # pinned action SHA; not a secret
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io
+        with:
+          args: ${{ steps.sonar-args.outputs.args }}
