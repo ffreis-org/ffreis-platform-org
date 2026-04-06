@@ -13,6 +13,11 @@ import (
 	"github.com/ffreis/platform-org/internal/activation"
 )
 
+const (
+	testDestroyProdConfirmation = "destroy-prod\n"
+	testPlatformOrgStateKey     = "platform-org/prod/terraform.tfstate"
+)
+
 func TestPlanCommandAllowsDetailedExitCodeTwo(t *testing.T) {
 	d.log = newLogger("error")
 	d.env = testEnv
@@ -178,7 +183,7 @@ func TestNukeCommandAllowsForceFalse(t *testing.T) {
 	t.Setenv("TRACE_FILE", traceFile)
 	setupFakeTerraform(t, `printf '%s\n' "$*" > "$TRACE_FILE"`)
 	withWorkingDir(t, root)
-	setStdinText(t, "destroy-prod\n")
+	setStdinText(t, testDestroyProdConfirmation)
 	nukeCmd.SetContext(context.Background())
 	old := nukeForce
 	oldList := listSchedulesFn
@@ -248,7 +253,7 @@ func TestNukeCommandRunsDestroyAfterConfirmation(t *testing.T) {
 	t.Setenv("TRACE_FILE", traceFile)
 	setupFakeTerraform(t, `printf '%s\n' "$*" > "$TRACE_FILE"`)
 	withWorkingDir(t, root)
-	setStdinText(t, "destroy-prod\n")
+	setStdinText(t, testDestroyProdConfirmation)
 	nukeCmd.SetContext(context.Background())
 	oldList := listSchedulesFn
 	oldDelete := deleteScheduleFn
@@ -431,7 +436,7 @@ func TestNukeCommandFallsBackWhenDestroyLeavesManagedResources(t *testing.T) {
 	t.Setenv("TRACE_FILE", traceFile)
 	setupFakeTerraform(t, `printf '%s\n' "$*" > "$TRACE_FILE"`)
 	withWorkingDir(t, root)
-	setStdinText(t, "destroy-prod\n")
+	setStdinText(t, testDestroyProdConfirmation)
 	nukeCmd.SetContext(context.Background())
 
 	oldList := listSchedulesFn
@@ -473,7 +478,7 @@ func TestNukeCommandFallsBackWhenDestroyLeavesManagedResources(t *testing.T) {
 	scanManagedPlatformOrgResourcesNukeFn = func(context.Context) ([]auditResource, error) {
 		scanCalls++
 		if scanCalls == 1 {
-			return []auditResource{{status: "OK", resourceType: "s3", name: "ffreis-tf-state-runtime", stack: "platform-org"}}, nil
+			return []auditResource{{status: "OK", resourceType: "s3", name: "ffreis-tf-state-runtime", stack: testPlatformOrgStack}}, nil
 		}
 		return nil, nil
 	}
@@ -481,7 +486,7 @@ func TestNukeCommandFallsBackWhenDestroyLeavesManagedResources(t *testing.T) {
 	platformOrgCleanupTargetsForNukeFn = func(context.Context) ([]auditResource, error) {
 		targetCalls++
 		if targetCalls <= 2 {
-			return []auditResource{{status: "OK", resourceType: "s3", name: "ffreis-tf-state-runtime", stack: "platform-org"}}, nil
+			return []auditResource{{status: "OK", resourceType: "s3", name: "ffreis-tf-state-runtime", stack: testPlatformOrgStack}}, nil
 		}
 		return nil, nil
 	}
@@ -510,7 +515,7 @@ func TestNukeCommandFallsBackWhenDestroyLeavesManagedResources(t *testing.T) {
 		return nukeBackendResetSummary{
 			BucketName:            "ffreis-tf-state-root",
 			TableName:             "ffreis-tf-locks-root",
-			StateKey:              "platform-org/prod/terraform.tfstate",
+			StateKey:              testPlatformOrgStateKey,
 			RemovedLocalTerraform: true,
 		}, nil
 	}
@@ -536,7 +541,7 @@ func TestLoadBackendStateConfigForNuke(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadBackendStateConfigForNuke: %v", err)
 	}
-	if got.BucketName != "ffreis-tf-state-root" || got.TableName != "ffreis-tf-locks-root" || got.StateKey != "platform-org/prod/terraform.tfstate" {
+	if got.BucketName != "ffreis-tf-state-root" || got.TableName != "ffreis-tf-locks-root" || got.StateKey != testPlatformOrgStateKey {
 		t.Fatalf("unexpected backend state config: %+v", got)
 	}
 }
@@ -548,7 +553,7 @@ func TestNukeCommandFallsBackWhenTerraformInitFails(t *testing.T) {
 	root := t.TempDir()
 	stack := initRepoLayout(t, root, testEnv)
 	withWorkingDir(t, root)
-	setStdinText(t, "destroy-prod\n")
+	setStdinText(t, testDestroyProdConfirmation)
 	nukeCmd.SetContext(context.Background())
 
 	oldList := listSchedulesFn
@@ -632,7 +637,7 @@ func TestNukeCommandSkipsTerraformWhenBackendMissing(t *testing.T) {
 	root := t.TempDir()
 	stack := initRepoLayout(t, root, testEnv)
 	withWorkingDir(t, root)
-	setStdinText(t, "destroy-prod\n")
+	setStdinText(t, testDestroyProdConfirmation)
 	nukeCmd.SetContext(context.Background())
 
 	oldList := listSchedulesFn
@@ -719,7 +724,7 @@ func TestNukeCleanupTargetsToleratesScanError(t *testing.T) {
 	}
 	explicitPlatformOrgCleanupTargetsFn = func(context.Context) ([]auditResource, error) {
 		return []auditResource{
-			{status: "OK", resourceType: "organizations/organization", name: "organization", stack: "platform-org"},
+			{status: "OK", resourceType: "organizations/organization", name: "organization", stack: testPlatformOrgStack},
 		}, nil
 	}
 

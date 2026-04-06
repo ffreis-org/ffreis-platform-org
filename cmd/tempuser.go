@@ -145,42 +145,62 @@ func isTempUserPropagationErr(err error) bool {
 	return strings.Contains(msg, "InvalidClientTokenId") || strings.Contains(msg, "AccessDenied")
 }
 
+func isIAMNoSuchEntity(err error) bool {
+	var nse *iamtypes.NoSuchEntityException
+	return errors.As(err, &nse)
+}
+
+func ensureTempUserExists(ctx context.Context, client iamAPI) error {
+	_, err := client.GetUser(ctx, &iam.GetUserInput{UserName: sdkaws.String(tempUserName)})
+	if err == nil {
+		return nil
+	}
+	if !isIAMNoSuchEntity(err) {
+		return fmt.Errorf("checking temp user: %w", err)
+	}
+	_, err = client.CreateUser(ctx, &iam.CreateUserInput{UserName: sdkaws.String(tempUserName)})
+	if err == nil {
+		return nil
+	}
+	var exists *iamtypes.EntityAlreadyExistsException
+	if errors.As(err, &exists) {
+		return nil
+	}
+	return fmt.Errorf("creating temp user: %w", err)
+}
+
+func deleteUserAccessKeys(ctx context.Context, client iamAPI, userName, deleteAction string) error {
+	keys, err := client.ListAccessKeys(ctx, &iam.ListAccessKeysInput{UserName: sdkaws.String(userName)})
+	if err != nil {
+		if isIAMNoSuchEntity(err) {
+			return nil
+		}
+		return fmt.Errorf("listing keys: %w", err)
+	}
+	for _, k := range keys.AccessKeyMetadata {
+		if _, err := client.DeleteAccessKey(ctx, &iam.DeleteAccessKeyInput{
+			UserName:    sdkaws.String(userName),
+			AccessKeyId: k.AccessKeyId,
+		}); err != nil {
+			if isIAMNoSuchEntity(err) {
+				continue
+			}
+			return fmt.Errorf("%s: %w", deleteAction, err)
+		}
+	}
+	return nil
+}
+
 // createTempUser creates (or reuses) the temp IAM user and returns fresh
 // credentials. Any existing access keys are deleted before creating a new one
 // to handle leftover keys from a previous partial run.
 func createTempUser(ctx context.Context, client iamAPI, roleARN string) (tempUserData, error) {
-	_, err := client.GetUser(ctx, &iam.GetUserInput{UserName: sdkaws.String(tempUserName)})
-	if err != nil {
-		var nse *iamtypes.NoSuchEntityException
-		if !errors.As(err, &nse) {
-			return tempUserData{}, fmt.Errorf("checking temp user: %w", err)
-		}
-		if _, createErr := client.CreateUser(ctx, &iam.CreateUserInput{
-			UserName: sdkaws.String(tempUserName),
-		}); createErr != nil {
-			var exists *iamtypes.EntityAlreadyExistsException
-			if !errors.As(createErr, &exists) {
-				return tempUserData{}, fmt.Errorf("creating temp user: %w", createErr)
-			}
-		}
+	if err := ensureTempUserExists(ctx, client); err != nil {
+		return tempUserData{}, err
 	}
 
-	// Delete any existing keys (max 2; orphaned from a previous partial run).
-	keys, err := client.ListAccessKeys(ctx, &iam.ListAccessKeysInput{
-		UserName: sdkaws.String(tempUserName),
-	})
-	if err == nil {
-		for _, k := range keys.AccessKeyMetadata {
-			if _, delErr := client.DeleteAccessKey(ctx, &iam.DeleteAccessKeyInput{
-				UserName:    sdkaws.String(tempUserName),
-				AccessKeyId: k.AccessKeyId,
-			}); delErr != nil {
-				var nse *iamtypes.NoSuchEntityException
-				if !errors.As(delErr, &nse) {
-					return tempUserData{}, fmt.Errorf("deleting orphaned key: %w", delErr)
-				}
-			}
-		}
+	if err := deleteUserAccessKeys(ctx, client, tempUserName, "deleting orphaned key"); err != nil {
+		return tempUserData{}, err
 	}
 
 	policyDoc := fmt.Sprintf(
@@ -212,35 +232,15 @@ func createTempUser(ctx context.Context, client iamAPI, roleARN string) (tempUse
 // deleteTempUser removes all access keys, the inline policy, and the user.
 // Safe to call when any component is already absent.
 func deleteTempUser(ctx context.Context, client iamAPI, u tempUserData) error {
-	keys, err := client.ListAccessKeys(ctx, &iam.ListAccessKeysInput{
-		UserName: sdkaws.String(u.userName),
-	})
-	if err != nil {
-		var nse *iamtypes.NoSuchEntityException
-		if !errors.As(err, &nse) {
-			return fmt.Errorf("listing keys: %w", err)
-		}
-	}
-	if keys != nil {
-		for _, k := range keys.AccessKeyMetadata {
-			if _, delErr := client.DeleteAccessKey(ctx, &iam.DeleteAccessKeyInput{
-				UserName:    sdkaws.String(u.userName),
-				AccessKeyId: k.AccessKeyId,
-			}); delErr != nil {
-				var nse *iamtypes.NoSuchEntityException
-				if !errors.As(delErr, &nse) {
-					return fmt.Errorf("deleting access key: %w", delErr)
-				}
-			}
-		}
+	if err := deleteUserAccessKeys(ctx, client, u.userName, "deleting access key"); err != nil {
+		return err
 	}
 
 	if _, err := client.DeleteUserPolicy(ctx, &iam.DeleteUserPolicyInput{
 		UserName:   sdkaws.String(u.userName),
 		PolicyName: sdkaws.String(tempPolicyName),
 	}); err != nil {
-		var nse *iamtypes.NoSuchEntityException
-		if !errors.As(err, &nse) {
+		if !isIAMNoSuchEntity(err) {
 			return fmt.Errorf("deleting temp user policy: %w", err)
 		}
 	}
@@ -248,8 +248,7 @@ func deleteTempUser(ctx context.Context, client iamAPI, u tempUserData) error {
 	if _, err := client.DeleteUser(ctx, &iam.DeleteUserInput{
 		UserName: sdkaws.String(u.userName),
 	}); err != nil {
-		var nse *iamtypes.NoSuchEntityException
-		if !errors.As(err, &nse) {
+		if !isIAMNoSuchEntity(err) {
 			return fmt.Errorf("deleting temp user: %w", err)
 		}
 	}

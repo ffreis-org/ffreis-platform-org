@@ -10,6 +10,7 @@ OVERRIDE="${STACK}/validate_credentials_override.tf"
 
 cleanup() {
   rm -f "${OVERRIDE}"
+  return
 }
 trap cleanup EXIT
 

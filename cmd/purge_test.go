@@ -6,8 +6,13 @@ import (
 	"testing"
 )
 
+const (
+	testECSTaskDefinitionType = "AWS::ECS::TaskDefinition"
+	testECSTaskDefinitionARN  = "arn:aws:ecs:us-east-1:123456789012:task-definition/name:42"
+)
+
 func TestPurgeClientTokenUsesAllowedCharacters(t *testing.T) {
-	token := purgeClientToken("AWS::ECS::TaskDefinition", "arn:aws:ecs:us-east-1:123456789012:task-definition/name:42")
+	token := purgeClientToken(testECSTaskDefinitionType, testECSTaskDefinitionARN)
 
 	if matched, err := regexp.MatchString(`^[-A-Za-z0-9+/=]+$`, token); err != nil {
 		t.Fatalf("MatchString error: %v", err)
@@ -17,8 +22,8 @@ func TestPurgeClientTokenUsesAllowedCharacters(t *testing.T) {
 }
 
 func TestPurgeClientTokenIsStable(t *testing.T) {
-	first := purgeClientToken("AWS::ECS::TaskDefinition", "arn:aws:ecs:us-east-1:123456789012:task-definition/name:42")
-	second := purgeClientToken("AWS::ECS::TaskDefinition", "arn:aws:ecs:us-east-1:123456789012:task-definition/name:42")
+	first := purgeClientToken(testECSTaskDefinitionType, testECSTaskDefinitionARN)
+	second := purgeClientToken(testECSTaskDefinitionType, testECSTaskDefinitionARN)
 
 	if first != second {
 		t.Fatalf("tokens differ: %q != %q", first, second)
@@ -33,7 +38,7 @@ func TestClassifyPurgeDeleteError(t *testing.T) {
 	}{
 		{
 			name: "gone by not found",
-			err:  errors.New("delete failed: Resource of type 'AWS::ECS::TaskDefinition' with identifier 'foo' was not found"),
+			err:  errors.New("delete failed: Resource of type '" + testECSTaskDefinitionType + "' with identifier 'foo' was not found"),
 			want: purgeFailureGone,
 		},
 		{

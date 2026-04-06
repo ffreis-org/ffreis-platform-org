@@ -60,9 +60,9 @@ resource "aws_iam_role_policy" "activate_lambda" {
         Resource = "*"
       },
       {
-        Sid      = "LogsCreateGroup"
-        Effect   = "Allow"
-        Action   = "logs:CreateLogGroup"
+        Sid    = "LogsCreateGroup"
+        Effect = "Allow"
+        Action = "logs:CreateLogGroup"
         # AWS does not support resource-level restrictions for CreateLogGroup.
         Resource = "*"
       },

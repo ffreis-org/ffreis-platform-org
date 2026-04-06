@@ -10,6 +10,7 @@ import (
 
 	sdkaws "github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/scheduler"
+	schedulertypes "github.com/aws/aws-sdk-go-v2/service/scheduler/types"
 	"github.com/spf13/cobra"
 )
 
@@ -193,25 +194,43 @@ func deletePendingSchedules(ctx context.Context, org string) ([]string, error) {
 			}
 			return nil, err
 		}
-		for _, scheduleSummary := range out.Schedules {
-			name := sdkaws.ToString(scheduleSummary.Name)
-			if name == "" {
-				continue
-			}
-			if _, err := deleteScheduleFn(ctx, &scheduler.DeleteScheduleInput{
-				GroupName: sdkaws.String(groupName),
-				Name:      sdkaws.String(name),
-			}); err != nil && !isNotFoundError(err) {
-				return nil, err
-			}
-			removed = append(removed, name)
+		pageRemoved, err := deleteSchedulePage(ctx, groupName, out.Schedules)
+		if err != nil {
+			return nil, err
 		}
+		removed = append(removed, pageRemoved...)
 		if sdkaws.ToString(out.NextToken) == "" {
 			break
 		}
 		nextToken = out.NextToken
 	}
 	return removed, nil
+}
+
+func deleteSchedulePage(ctx context.Context, groupName string, schedules []schedulertypes.ScheduleSummary) ([]string, error) {
+	removed := make([]string, 0, len(schedules))
+	for _, scheduleSummary := range schedules {
+		name := sdkaws.ToString(scheduleSummary.Name)
+		if name == "" {
+			continue
+		}
+		if err := deletePendingSchedule(ctx, groupName, name); err != nil {
+			return nil, err
+		}
+		removed = append(removed, name)
+	}
+	return removed, nil
+}
+
+func deletePendingSchedule(ctx context.Context, groupName, name string) error {
+	_, err := deleteScheduleFn(ctx, &scheduler.DeleteScheduleInput{
+		GroupName: sdkaws.String(groupName),
+		Name:      sdkaws.String(name),
+	})
+	if err != nil && !isNotFoundError(err) {
+		return err
+	}
+	return nil
 }
 
 func cleanupInventorySourcesForNuke(ctx context.Context) ([]string, error) {

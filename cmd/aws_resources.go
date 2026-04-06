@@ -18,6 +18,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/organizations"
 	"github.com/aws/aws-sdk-go-v2/service/resourcegroups"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/aws-sdk-go-v2/service/sagemaker"
 	"github.com/aws/aws-sdk-go-v2/service/scheduler"
 	"github.com/aws/aws-sdk-go-v2/service/servicediscovery"
@@ -40,6 +41,115 @@ var (
 	newSchedulerDeleteClient  = scheduler.NewFromConfig
 	newServiceDiscoveryClient = servicediscovery.NewFromConfig
 )
+
+type nativeResourceDeleteFn func(context.Context, auditResource, bool) (bool, error)
+
+var nativeDeleteHandlers = map[string]nativeResourceDeleteFn{
+	"ecs/task-definition": func(ctx context.Context, resource auditResource, _ bool) (bool, error) {
+		return true, deleteECSTaskDefinition(ctx, resource.arn)
+	},
+	"events/rule": func(ctx context.Context, resource auditResource, _ bool) (bool, error) {
+		client := newEventBridgeClient(d.awsCfg)
+		if err := deleteEventBridgeRuleTargets(ctx, client, resource.name); err != nil {
+			return true, &purgeManualError{cause: err, hint: "remove targets manually before deleting rule"}
+		}
+		_, err := client.DeleteRule(ctx, &eventbridge.DeleteRuleInput{Name: sdkaws.String(resource.name), Force: true})
+		if err != nil && isTargetsStillPresentError(err) {
+			return true, &purgeManualError{cause: err, hint: "disable the owning service (e.g. ECS capacity provider) before deleting this rule"}
+		}
+		return true, err
+	},
+	"servicediscovery/namespace": func(ctx context.Context, resource auditResource, _ bool) (bool, error) {
+		client := newServiceDiscoveryClient(d.awsCfg)
+		_, err := client.DeleteNamespace(ctx, &servicediscovery.DeleteNamespaceInput{Id: sdkaws.String(resource.name)})
+		return true, err
+	},
+	"sagemaker/notebook-instance": func(ctx context.Context, resource auditResource, _ bool) (bool, error) {
+		client := newSageMakerClient(d.awsCfg)
+		_, err := client.DeleteNotebookInstance(ctx, &sagemaker.DeleteNotebookInstanceInput{NotebookInstanceName: sdkaws.String(resource.name)})
+		return true, err
+	},
+	"lightsail/StaticIp": func(ctx context.Context, resource auditResource, _ bool) (bool, error) {
+		client := newLightsailClient(d.awsCfg)
+		_, err := client.ReleaseStaticIp(ctx, &lightsail.ReleaseStaticIpInput{StaticIpName: sdkaws.String(resource.name)})
+		return true, err
+	},
+	"lightsail/KeyPair": func(ctx context.Context, resource auditResource, _ bool) (bool, error) {
+		client := newLightsailClient(d.awsCfg)
+		_, err := client.DeleteKeyPair(ctx, &lightsail.DeleteKeyPairInput{KeyPairName: sdkaws.String(resource.name)})
+		return true, err
+	},
+	"lambda/function": func(ctx context.Context, resource auditResource, _ bool) (bool, error) {
+		client := newLambdaDeleteClient(d.awsCfg)
+		_, err := client.DeleteFunction(ctx, &lambda.DeleteFunctionInput{FunctionName: sdkaws.String(resource.name)})
+		return true, err
+	},
+	"iam/role": func(ctx context.Context, resource auditResource, _ bool) (bool, error) {
+		return true, forceDeleteIAMRole(ctx, resource.name)
+	},
+	"s3": func(ctx context.Context, resource auditResource, _ bool) (bool, error) {
+		return true, forceDeleteS3Bucket(ctx, resource.name)
+	},
+	"dynamodb/table": func(ctx context.Context, resource auditResource, _ bool) (bool, error) {
+		client := newDynamoDeleteClient(d.awsCfg)
+		_, err := client.DeleteTable(ctx, &dynamodb.DeleteTableInput{TableName: sdkaws.String(resource.name)})
+		return true, err
+	},
+	"resource-groups/group": func(ctx context.Context, resource auditResource, _ bool) (bool, error) {
+		client := newResourceGroupsClient(d.awsCfg)
+		_, err := client.DeleteGroup(ctx, &resourcegroups.DeleteGroupInput{GroupName: sdkaws.String(resource.name)})
+		return true, err
+	},
+	"budgets/budget": func(ctx context.Context, resource auditResource, _ bool) (bool, error) {
+		client := newBudgetsDeleteClient(d.awsCfg)
+		_, err := client.DeleteBudget(ctx, &budgets.DeleteBudgetInput{AccountId: sdkaws.String(d.accountID), BudgetName: sdkaws.String(resource.name)})
+		return true, err
+	},
+	"iam/oidc-provider": func(ctx context.Context, resource auditResource, _ bool) (bool, error) {
+		client := newIAMDeleteClient(d.awsCfg)
+		_, err := client.DeleteOpenIDConnectProvider(ctx, &iam.DeleteOpenIDConnectProviderInput{OpenIDConnectProviderArn: sdkaws.String(resource.arn)})
+		return true, err
+	},
+	"logs/log-group": func(ctx context.Context, resource auditResource, _ bool) (bool, error) {
+		client := newCloudWatchLogsClient(d.awsCfg)
+		_, err := client.DeleteLogGroup(ctx, &cloudwatchlogs.DeleteLogGroupInput{LogGroupName: sdkaws.String(resource.name)})
+		return true, err
+	},
+	"scheduler/schedule-group": func(ctx context.Context, resource auditResource, _ bool) (bool, error) {
+		client := newSchedulerDeleteClient(d.awsCfg)
+		_, err := client.DeleteScheduleGroup(ctx, &scheduler.DeleteScheduleGroupInput{Name: sdkaws.String(resource.name)})
+		return true, err
+	},
+	"organizations/policy-attachment": func(ctx context.Context, resource auditResource, _ bool) (bool, error) {
+		return true, detachOrganizationPolicyBySyntheticName(ctx, resource.name)
+	},
+	"organizations/policy": func(ctx context.Context, resource auditResource, _ bool) (bool, error) {
+		return true, deleteOrganizationPolicyByName(ctx, resource.name)
+	},
+	"organizations/organizational-unit": func(ctx context.Context, resource auditResource, _ bool) (bool, error) {
+		return true, deleteOrganizationOUByName(ctx, resource.name)
+	},
+	"organizations/organization": func(ctx context.Context, _ auditResource, _ bool) (bool, error) {
+		client := newOrganizationsClient(d.awsCfg)
+		_, err := client.DeleteOrganization(ctx, &organizations.DeleteOrganizationInput{})
+		return true, err
+	},
+	"organizations/account": func(ctx context.Context, resource auditResource, _ bool) (bool, error) {
+		return true, closeOrganizationAccountByName(ctx, resource.name)
+	},
+	"ec2/internet-gateway": func(ctx context.Context, resource auditResource, force bool) (bool, error) {
+		if !force {
+			return false, nil
+		}
+		return true, forceDeleteInternetGateway(ctx, resource.name)
+	},
+	"ec2/route-table": func(ctx context.Context, resource auditResource, force bool) (bool, error) {
+		if !force {
+			return false, nil
+		}
+		return true, forceDeleteRouteTable(ctx, resource.name)
+	},
+}
 
 func resourceExists(ctx context.Context, resource auditResource) (bool, error) {
 	switch resource.resourceType {
@@ -85,125 +195,11 @@ func resourceExists(ctx context.Context, resource auditResource) (bool, error) {
 }
 
 func deleteResourceNatively(ctx context.Context, resource auditResource, force bool) (bool, error) {
-	switch resource.resourceType {
-	case "ecs/task-definition":
-		// Cloud Control only deregisters task definitions (sets INACTIVE) — it
-		// doesn't fully delete them, so they keep appearing in the Tagging API.
-		// Use the ECS SDK directly: deregister if ACTIVE, then delete.
-		return true, deleteECSTaskDefinition(ctx, resource.arn)
-	case "events/rule":
-		client := newEventBridgeClient(d.awsCfg)
-		if err := deleteEventBridgeRuleTargets(ctx, client, resource.name); err != nil {
-			// If we can't even list/remove targets, mark as manual so the
-			// operator can investigate rather than leaving it as a hard failure.
-			return true, &purgeManualError{cause: err, hint: "remove targets manually before deleting rule"}
-		}
-		_, err := client.DeleteRule(ctx, &eventbridge.DeleteRuleInput{
-			Name:  sdkaws.String(resource.name),
-			Force: true,
-		})
-		if err != nil && isTargetsStillPresentError(err) {
-			// ECS or another service owns this rule and re-adds targets after
-			// we remove them. Cannot delete without disabling the owning service first.
-			return true, &purgeManualError{cause: err, hint: "disable the owning service (e.g. ECS capacity provider) before deleting this rule"}
-		}
-		return true, err
-	case "servicediscovery/namespace":
-		client := newServiceDiscoveryClient(d.awsCfg)
-		_, err := client.DeleteNamespace(ctx, &servicediscovery.DeleteNamespaceInput{
-			Id: sdkaws.String(resource.name),
-		})
-		return true, err
-	case "sagemaker/notebook-instance":
-		client := newSageMakerClient(d.awsCfg)
-		_, err := client.DeleteNotebookInstance(ctx, &sagemaker.DeleteNotebookInstanceInput{
-			NotebookInstanceName: sdkaws.String(resource.name),
-		})
-		return true, err
-	case "lightsail/StaticIp":
-		client := newLightsailClient(d.awsCfg)
-		_, err := client.ReleaseStaticIp(ctx, &lightsail.ReleaseStaticIpInput{
-			StaticIpName: sdkaws.String(resource.name),
-		})
-		return true, err
-	case "lightsail/KeyPair":
-		client := newLightsailClient(d.awsCfg)
-		_, err := client.DeleteKeyPair(ctx, &lightsail.DeleteKeyPairInput{
-			KeyPairName: sdkaws.String(resource.name),
-		})
-		return true, err
-	case "lambda/function":
-		client := newLambdaDeleteClient(d.awsCfg)
-		_, err := client.DeleteFunction(ctx, &lambda.DeleteFunctionInput{
-			FunctionName: sdkaws.String(resource.name),
-		})
-		return true, err
-	case "iam/role":
-		return true, forceDeleteIAMRole(ctx, resource.name)
-	case "s3":
-		return true, forceDeleteS3Bucket(ctx, resource.name)
-	case "dynamodb/table":
-		client := newDynamoDeleteClient(d.awsCfg)
-		_, err := client.DeleteTable(ctx, &dynamodb.DeleteTableInput{
-			TableName: sdkaws.String(resource.name),
-		})
-		return true, err
-	case "resource-groups/group":
-		client := newResourceGroupsClient(d.awsCfg)
-		_, err := client.DeleteGroup(ctx, &resourcegroups.DeleteGroupInput{
-			GroupName: sdkaws.String(resource.name),
-		})
-		return true, err
-	case "budgets/budget":
-		client := newBudgetsDeleteClient(d.awsCfg)
-		_, err := client.DeleteBudget(ctx, &budgets.DeleteBudgetInput{
-			AccountId:  sdkaws.String(d.accountID),
-			BudgetName: sdkaws.String(resource.name),
-		})
-		return true, err
-	case "iam/oidc-provider":
-		client := newIAMDeleteClient(d.awsCfg)
-		_, err := client.DeleteOpenIDConnectProvider(ctx, &iam.DeleteOpenIDConnectProviderInput{
-			OpenIDConnectProviderArn: sdkaws.String(resource.arn),
-		})
-		return true, err
-	case "logs/log-group":
-		client := newCloudWatchLogsClient(d.awsCfg)
-		_, err := client.DeleteLogGroup(ctx, &cloudwatchlogs.DeleteLogGroupInput{
-			LogGroupName: sdkaws.String(resource.name),
-		})
-		return true, err
-	case "scheduler/schedule-group":
-		client := newSchedulerDeleteClient(d.awsCfg)
-		_, err := client.DeleteScheduleGroup(ctx, &scheduler.DeleteScheduleGroupInput{
-			Name: sdkaws.String(resource.name),
-		})
-		return true, err
-	case "organizations/policy-attachment":
-		return true, detachOrganizationPolicyBySyntheticName(ctx, resource.name)
-	case "organizations/policy":
-		return true, deleteOrganizationPolicyByName(ctx, resource.name)
-	case "organizations/organizational-unit":
-		return true, deleteOrganizationOUByName(ctx, resource.name)
-	case "organizations/organization":
-		client := newOrganizationsClient(d.awsCfg)
-		_, err := client.DeleteOrganization(ctx, &organizations.DeleteOrganizationInput{})
-		return true, err
-	case "organizations/account":
-		return true, closeOrganizationAccountByName(ctx, resource.name)
-	case "ec2/internet-gateway":
-		if !force {
-			return false, nil
-		}
-		return true, forceDeleteInternetGateway(ctx, resource.name)
-	case "ec2/route-table":
-		if !force {
-			return false, nil
-		}
-		return true, forceDeleteRouteTable(ctx, resource.name)
-	default:
+	handler, ok := nativeDeleteHandlers[resource.resourceType]
+	if !ok {
 		return false, nil
 	}
+	return handler(ctx, resource, force)
 }
 
 func forceDeleteIAMRole(ctx context.Context, roleName string) error {
@@ -288,25 +284,11 @@ func forceDeleteS3Bucket(ctx context.Context, bucket string) error {
 			}
 			return err
 		}
-		for _, version := range out.Versions {
-			_, err := client.DeleteObject(ctx, &s3.DeleteObjectInput{
-				Bucket:    sdkaws.String(bucket),
-				Key:       version.Key,
-				VersionId: version.VersionId,
-			})
-			if err != nil && !isNotFoundError(err) {
-				return err
-			}
+		if err := deleteS3ObjectVersions(ctx, client, bucket, out.Versions); err != nil {
+			return err
 		}
-		for _, marker := range out.DeleteMarkers {
-			_, err := client.DeleteObject(ctx, &s3.DeleteObjectInput{
-				Bucket:    sdkaws.String(bucket),
-				Key:       marker.Key,
-				VersionId: marker.VersionId,
-			})
-			if err != nil && !isNotFoundError(err) {
-				return err
-			}
+		if err := deleteS3DeleteMarkers(ctx, client, bucket, out.DeleteMarkers); err != nil {
+			return err
 		}
 		if !sdkaws.ToBool(out.IsTruncated) {
 			break
@@ -315,16 +297,59 @@ func forceDeleteS3Bucket(ctx context.Context, bucket string) error {
 		versionMarker = out.NextVersionIdMarker
 	}
 
-	_, err := client.DeleteBucket(ctx, &s3.DeleteBucketInput{
-		Bucket: sdkaws.String(bucket),
-	})
+	_, err := client.DeleteBucket(ctx, &s3.DeleteBucketInput{Bucket: sdkaws.String(bucket)})
 	if err != nil && isS3BucketMissing(err) {
 		return nil
 	}
 	return err
 }
 
+func deleteS3ObjectVersions(ctx context.Context, client *s3.Client, bucket string, versions []s3types.ObjectVersion) error {
+	for _, version := range versions {
+		_, err := client.DeleteObject(ctx, &s3.DeleteObjectInput{
+			Bucket:    sdkaws.String(bucket),
+			Key:       version.Key,
+			VersionId: version.VersionId,
+		})
+		if err != nil && !isNotFoundError(err) {
+			return err
+		}
+	}
+	return nil
+}
+
+func deleteS3DeleteMarkers(ctx context.Context, client *s3.Client, bucket string, markers []s3types.DeleteMarkerEntry) error {
+	for _, marker := range markers {
+		_, err := client.DeleteObject(ctx, &s3.DeleteObjectInput{
+			Bucket:    sdkaws.String(bucket),
+			Key:       marker.Key,
+			VersionId: marker.VersionId,
+		})
+		if err != nil && !isNotFoundError(err) {
+			return err
+		}
+	}
+	return nil
+}
+
 func deleteEventBridgeRuleTargets(ctx context.Context, client *eventbridge.Client, ruleName string) error {
+	targetIDs, err := listEventBridgeTargetIDs(ctx, client, ruleName)
+	if err != nil {
+		return err
+	}
+	for start := 0; start < len(targetIDs); start += 10 {
+		end := start + 10
+		if end > len(targetIDs) {
+			end = len(targetIDs)
+		}
+		if err := removeEventBridgeTargetBatch(ctx, client, ruleName, targetIDs[start:end]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func listEventBridgeTargetIDs(ctx context.Context, client *eventbridge.Client, ruleName string) ([]string, error) {
 	var nextToken *string
 	var targetIDs []string
 	for {
@@ -333,7 +358,7 @@ func deleteEventBridgeRuleTargets(ctx context.Context, client *eventbridge.Clien
 			NextToken: nextToken,
 		})
 		if err != nil {
-			return err
+			return nil, err
 		}
 		for _, target := range out.Targets {
 			if target.Id != nil && sdkaws.ToString(target.Id) != "" {
@@ -341,39 +366,34 @@ func deleteEventBridgeRuleTargets(ctx context.Context, client *eventbridge.Clien
 			}
 		}
 		if out.NextToken == nil || sdkaws.ToString(out.NextToken) == "" {
-			break
+			return targetIDs, nil
 		}
 		nextToken = out.NextToken
 	}
+}
 
-	for start := 0; start < len(targetIDs); start += 10 {
-		end := start + 10
-		if end > len(targetIDs) {
-			end = len(targetIDs)
-		}
-		out, err := client.RemoveTargets(ctx, &eventbridge.RemoveTargetsInput{
-			Rule:  sdkaws.String(ruleName),
-			Ids:   targetIDs[start:end],
-			Force: true,
-		})
-		if err != nil {
-			return err
-		}
-		if out.FailedEntryCount > 0 {
-			failed := make([]string, 0, len(out.FailedEntries))
-			for _, entry := range out.FailedEntries {
-				if entry.TargetId != nil && sdkaws.ToString(entry.TargetId) != "" {
-					failed = append(failed, sdkaws.ToString(entry.TargetId))
-				}
-			}
-			if len(failed) == 0 {
-				return fmt.Errorf("failed to remove %d EventBridge target(s) from rule %s", out.FailedEntryCount, ruleName)
-			}
-			return fmt.Errorf("failed to remove EventBridge targets from rule %s: %s", ruleName, strings.Join(failed, ", "))
+func removeEventBridgeTargetBatch(ctx context.Context, client *eventbridge.Client, ruleName string, targetIDs []string) error {
+	out, err := client.RemoveTargets(ctx, &eventbridge.RemoveTargetsInput{
+		Rule:  sdkaws.String(ruleName),
+		Ids:   targetIDs,
+		Force: true,
+	})
+	if err != nil {
+		return err
+	}
+	if out.FailedEntryCount == 0 {
+		return nil
+	}
+	failed := make([]string, 0, len(out.FailedEntries))
+	for _, entry := range out.FailedEntries {
+		if entry.TargetId != nil && sdkaws.ToString(entry.TargetId) != "" {
+			failed = append(failed, sdkaws.ToString(entry.TargetId))
 		}
 	}
-
-	return nil
+	if len(failed) == 0 {
+		return fmt.Errorf("failed to remove %d EventBridge target(s) from rule %s", out.FailedEntryCount, ruleName)
+	}
+	return fmt.Errorf("failed to remove EventBridge targets from rule %s: %s", ruleName, strings.Join(failed, ", "))
 }
 
 func forceDeleteInternetGateway(ctx context.Context, gatewayID string) error {

@@ -57,6 +57,11 @@ type nukeBackendResetDynamoAPI interface {
 	DeleteItem(context.Context, *dynamodb.DeleteItemInput, ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error)
 }
 
+const (
+	resourceTypeOrganizationsPolicyAttachment = "organizations/policy-attachment"
+	orgPolicyDenyLeaveOrganizationName        = "deny-leave-organization"
+)
+
 var (
 	ensureInitForNukeFn                   = ensureInit
 	runTerraformForNukeFn                 = runTerraform
@@ -332,27 +337,27 @@ func explicitPlatformOrgCleanupTargets(ctx context.Context) ([]auditResource, er
 			},
 		},
 		{
-			resource: auditResource{status: "OK", resourceType: "organizations/policy", name: "deny-leave-organization", stack: "platform-org"},
+			resource: auditResource{status: "OK", resourceType: "organizations/policy", name: orgPolicyDenyLeaveOrganizationName, stack: "platform-org"},
 			exists: func(ctx context.Context) (bool, error) {
 				return organizationPolicyExists(ctx, "deny-leave-organization")
 			},
 		},
 		{
-			resource: auditResource{status: "OK", resourceType: "organizations/policy-attachment", name: "deny-iam-user-creation@environments", stack: "platform-org"},
+			resource: auditResource{status: "OK", resourceType: resourceTypeOrganizationsPolicyAttachment, name: "deny-iam-user-creation@environments", stack: "platform-org"},
 			exists: func(ctx context.Context) (bool, error) {
 				return organizationPolicyAttachmentExists(ctx, "deny-iam-user-creation", "environments")
 			},
 		},
 		{
-			resource: auditResource{status: "OK", resourceType: "organizations/policy-attachment", name: "deny-disable-cloudtrail@environments", stack: "platform-org"},
+			resource: auditResource{status: "OK", resourceType: resourceTypeOrganizationsPolicyAttachment, name: "deny-disable-cloudtrail@environments", stack: "platform-org"},
 			exists: func(ctx context.Context) (bool, error) {
 				return organizationPolicyAttachmentExists(ctx, "deny-disable-cloudtrail", "environments")
 			},
 		},
 		{
-			resource: auditResource{status: "OK", resourceType: "organizations/policy-attachment", name: "deny-leave-organization@environments", stack: "platform-org"},
+			resource: auditResource{status: "OK", resourceType: resourceTypeOrganizationsPolicyAttachment, name: "deny-leave-organization@environments", stack: "platform-org"},
 			exists: func(ctx context.Context) (bool, error) {
-				return organizationPolicyAttachmentExists(ctx, "deny-leave-organization", "environments")
+				return organizationPolicyAttachmentExists(ctx, orgPolicyDenyLeaveOrganizationName, "environments")
 			},
 		},
 		{

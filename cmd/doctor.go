@@ -82,6 +82,20 @@ type terraformStateObject struct {
 	ARN     string
 }
 
+const (
+	backendStateObjectKey           = "backend.state-object"
+	backendStateObjectReadableTitle = "backend state object is readable"
+	backendLockRowsKey              = "backend.lock-rows"
+	backendLockRowsTitle            = "backend lock rows are coherent with the state key"
+	tfStateIntegrityTitle           = "Terraform State Integrity"
+	runtimeSchedulerRolePolicyKey   = "runtime.scheduler-role-policy"
+	runtimeSchedulerRolePolicyTitle = "scheduler invoke role policy targets the current Lambda"
+	runtimeLambdaRolePolicyKey      = "runtime.lambda-role-policy"
+	runtimeLambdaRolePolicyTitle    = "Lambda role policy references the current SNS topic and log group"
+	runtimeLambdaEnvironmentKey     = "runtime.lambda-environment"
+	runtimeLambdaEnvironmentTitle   = "activation Lambda points to the current events topic"
+)
+
 var (
 	platformOrgDoctorRunFn = runPlatformOrgDoctor
 	platformOrgDoctorModes = struct {
@@ -373,7 +387,7 @@ func platformOrgBackendDoctorSection(ctx context.Context) (platformOrgDoctorSect
 	lockItems, lockErr := findMatchingLockItems(ctx, dynamoClient, cfg.TableName, cfg.BucketName, cfg.StateKey)
 	if stateErr != nil {
 		checks = append(checks, platformOrgDoctorCheck{
-			Key:      "backend.state-object",
+			Key:      backendStateObjectKey,
 			Title:    "backend state object is readable",
 			Status:   "fail",
 			Detail:   stateErr.Error(),
@@ -383,7 +397,7 @@ func platformOrgBackendDoctorSection(ctx context.Context) (platformOrgDoctorSect
 		})
 	} else if len(stateVersions) == 0 {
 		checks = append(checks, platformOrgDoctorCheck{
-			Key:      "backend.state-object",
+			Key:      backendStateObjectKey,
 			Title:    "backend state object is readable",
 			Status:   "info",
 			Detail:   "no current state object exists for " + cfg.StateKey,
@@ -393,7 +407,7 @@ func platformOrgBackendDoctorSection(ctx context.Context) (platformOrgDoctorSect
 		})
 	} else {
 		checks = append(checks, platformOrgDoctorCheck{
-			Key:      "backend.state-object",
+			Key:      backendStateObjectKey,
 			Title:    "backend state object is readable",
 			Status:   "ok",
 			Detail:   fmt.Sprintf("%d state object version(s) found for %s", len(stateVersions), cfg.StateKey),
@@ -406,7 +420,7 @@ func platformOrgBackendDoctorSection(ctx context.Context) (platformOrgDoctorSect
 	if lockErr != nil {
 		checks = append(checks, platformOrgDoctorCheck{
 			Key:      "backend.lock-rows",
-			Title:    "backend lock rows are coherent with the state key",
+			Title:    backendLockRowsTitle,
 			Status:   "fail",
 			Detail:   lockErr.Error(),
 			Hint:     "repair the root lock table or permissions so terraform lock rows can be inspected",
@@ -418,7 +432,7 @@ func platformOrgBackendDoctorSection(ctx context.Context) (platformOrgDoctorSect
 		case len(lockItems) > 0 && len(stateVersions) == 0:
 			checks = append(checks, platformOrgDoctorCheck{
 				Key:      "backend.lock-rows",
-				Title:    "backend lock rows are coherent with the state key",
+				Title:    backendLockRowsTitle,
 				Status:   "fail",
 				Detail:   fmt.Sprintf("%d lock row(s) exist for %s but no current state object exists", len(lockItems), cfg.StateKey),
 				Hint:     "clear orphaned terraform lock rows before trusting the root backend",
@@ -428,7 +442,7 @@ func platformOrgBackendDoctorSection(ctx context.Context) (platformOrgDoctorSect
 		case len(lockItems) == 0 && len(stateVersions) > 0:
 			checks = append(checks, platformOrgDoctorCheck{
 				Key:      "backend.lock-rows",
-				Title:    "backend lock rows are coherent with the state key",
+				Title:    backendLockRowsTitle,
 				Status:   "warn",
 				Detail:   "state object exists but no matching lock rows are present",
 				Hint:     "this is usually fine when terraform is idle, but verify the backend if concurrent operations were expected",
@@ -438,7 +452,7 @@ func platformOrgBackendDoctorSection(ctx context.Context) (platformOrgDoctorSect
 		case len(lockItems) > 0:
 			checks = append(checks, platformOrgDoctorCheck{
 				Key:      "backend.lock-rows",
-				Title:    "backend lock rows are coherent with the state key",
+				Title:    backendLockRowsTitle,
 				Status:   "warn",
 				Detail:   fmt.Sprintf("%d matching lock row(s) exist for %s", len(lockItems), cfg.StateKey),
 				Hint:     "ensure no terraform apply/destroy is still in flight before proceeding",
@@ -448,7 +462,7 @@ func platformOrgBackendDoctorSection(ctx context.Context) (platformOrgDoctorSect
 		default:
 			checks = append(checks, platformOrgDoctorCheck{
 				Key:      "backend.lock-rows",
-				Title:    "backend lock rows are coherent with the state key",
+				Title:    backendLockRowsTitle,
 				Status:   "ok",
 				Detail:   "no orphaned lock rows found for the current state key",
 				Hint:     "lock rows should remain empty when terraform is idle",
@@ -469,7 +483,7 @@ func platformOrgStateDoctorSection(ctx context.Context, mode platformOrgDoctorMo
 	cfg, err := loadBackendStateConfigForNukeFn(root, d.env)
 	if err != nil {
 		return platformOrgDoctorSection{
-			Title: "Terraform State Integrity",
+			Title: tfStateIntegrityTitle,
 			Checks: []platformOrgDoctorCheck{{
 				Key:      "state.backend-config",
 				Title:    "backend state can be inspected",
@@ -504,7 +518,7 @@ func platformOrgStateDoctorSection(ctx context.Context, mode platformOrgDoctorMo
 			Related:  []string{cfg.BucketName + "/" + cfg.StateKey},
 			Blocking: !mode.LenientState,
 		})
-		return platformOrgDoctorSection{Title: "Terraform State Integrity", Checks: checks}, nil
+		return platformOrgDoctorSection{Title: tfStateIntegrityTitle, Checks: checks}, nil
 	}
 
 	if liveErr != nil {
@@ -516,7 +530,7 @@ func platformOrgStateDoctorSection(ctx context.Context, mode platformOrgDoctorMo
 			Hint:     "repair tagging or explicit live-resource discovery before relying on state integrity checks",
 			Blocking: !mode.LenientState,
 		})
-		return platformOrgDoctorSection{Title: "Terraform State Integrity", Checks: checks}, nil
+		return platformOrgDoctorSection{Title: tfStateIntegrityTitle, Checks: checks}, nil
 	}
 
 	stateByAddress := make(map[string]terraformStateObject, len(stateResources))
@@ -637,7 +651,7 @@ func platformOrgStateDoctorSection(ctx context.Context, mode platformOrgDoctorMo
 		})
 	}
 
-	return platformOrgDoctorSection{Title: "Terraform State Integrity", Checks: checks}, nil
+	return platformOrgDoctorSection{Title: tfStateIntegrityTitle, Checks: checks}, nil
 }
 
 func platformOrgRuntimeDoctorSection(ctx context.Context, mode platformOrgDoctorMode) (platformOrgDoctorSection, error) {
@@ -702,8 +716,8 @@ func platformOrgRuntimeDoctorSection(ctx context.Context, mode platformOrgDoctor
 	rolePolicyDoc, rolePolicyExists, err := getInlineRolePolicyDocument(ctx, expectedScheduleRole, "invoke-activate-lambda")
 	if err != nil {
 		checks = append(checks, platformOrgDoctorCheck{
-			Key:      "runtime.scheduler-role-policy",
-			Title:    "scheduler invoke role policy targets the current Lambda",
+			Key:      runtimeSchedulerRolePolicyKey,
+			Title:    runtimeSchedulerRolePolicyTitle,
 			Status:   "fail",
 			Detail:   err.Error(),
 			Hint:     "repair the scheduler invoke role inline policy",
@@ -719,8 +733,8 @@ func platformOrgRuntimeDoctorSection(ctx context.Context, mode platformOrgDoctor
 			blocking = true
 		}
 		checks = append(checks, platformOrgDoctorCheck{
-			Key:      "runtime.scheduler-role-policy",
-			Title:    "scheduler invoke role policy targets the current Lambda",
+			Key:      runtimeSchedulerRolePolicyKey,
+			Title:    runtimeSchedulerRolePolicyTitle,
 			Status:   status,
 			Detail:   detail,
 			Hint:     "apply the platform-org stack to create the scheduler invoke role policy",
@@ -735,8 +749,8 @@ func platformOrgRuntimeDoctorSection(ctx context.Context, mode platformOrgDoctor
 			detail = "scheduler invoke role policy does not reference " + expectedLambdaARN
 		}
 		checks = append(checks, platformOrgDoctorCheck{
-			Key:      "runtime.scheduler-role-policy",
-			Title:    "scheduler invoke role policy targets the current Lambda",
+			Key:      runtimeSchedulerRolePolicyKey,
+			Title:    runtimeSchedulerRolePolicyTitle,
 			Status:   status,
 			Detail:   detail,
 			Hint:     "repair the scheduler invoke role policy so it references the current Lambda ARN",
@@ -748,8 +762,8 @@ func platformOrgRuntimeDoctorSection(ctx context.Context, mode platformOrgDoctor
 	lambdaRolePolicyDoc, lambdaRolePolicyExists, err := getInlineRolePolicyDocument(ctx, expectedLambdaName, "activate-cost-tags")
 	if err != nil {
 		checks = append(checks, platformOrgDoctorCheck{
-			Key:      "runtime.lambda-role-policy",
-			Title:    "Lambda role policy references the current SNS topic and log group",
+			Key:      runtimeLambdaRolePolicyKey,
+			Title:    runtimeLambdaRolePolicyTitle,
 			Status:   "fail",
 			Detail:   err.Error(),
 			Hint:     "repair the Lambda execution role policy",
@@ -764,8 +778,8 @@ func platformOrgRuntimeDoctorSection(ctx context.Context, mode platformOrgDoctor
 			blocking = true
 		}
 		checks = append(checks, platformOrgDoctorCheck{
-			Key:      "runtime.lambda-role-policy",
-			Title:    "Lambda role policy references the current SNS topic and log group",
+			Key:      runtimeLambdaRolePolicyKey,
+			Title:    runtimeLambdaRolePolicyTitle,
 			Status:   status,
 			Detail:   "Lambda execution role policy is not present",
 			Hint:     "apply the platform-org stack to create the Lambda execution role policy",
@@ -780,8 +794,8 @@ func platformOrgRuntimeDoctorSection(ctx context.Context, mode platformOrgDoctor
 			detail = "Lambda execution role policy does not reference the current SNS topic ARN and log group ARN pattern"
 		}
 		checks = append(checks, platformOrgDoctorCheck{
-			Key:      "runtime.lambda-role-policy",
-			Title:    "Lambda role policy references the current SNS topic and log group",
+			Key:      runtimeLambdaRolePolicyKey,
+			Title:    runtimeLambdaRolePolicyTitle,
 			Status:   status,
 			Detail:   detail,
 			Hint:     "repair the Lambda execution role policy so it references the current topic and log group pattern",
@@ -796,8 +810,8 @@ func platformOrgRuntimeDoctorSection(ctx context.Context, mode platformOrgDoctor
 	if err != nil {
 		if isNotFoundError(err) {
 			checks = append(checks, platformOrgDoctorCheck{
-				Key:      "runtime.lambda-environment",
-				Title:    "activation Lambda points to the current events topic",
+				Key:      runtimeLambdaEnvironmentKey,
+				Title:    runtimeLambdaEnvironmentTitle,
 				Status:   "info",
 				Detail:   "activation Lambda is not present",
 				Hint:     "apply the platform-org stack to create the activation Lambda",
@@ -806,8 +820,8 @@ func platformOrgRuntimeDoctorSection(ctx context.Context, mode platformOrgDoctor
 			})
 		} else {
 			checks = append(checks, platformOrgDoctorCheck{
-				Key:      "runtime.lambda-environment",
-				Title:    "activation Lambda points to the current events topic",
+				Key:      runtimeLambdaEnvironmentKey,
+				Title:    runtimeLambdaEnvironmentTitle,
 				Status:   "fail",
 				Detail:   err.Error(),
 				Hint:     "repair Lambda access so the function configuration can be inspected",
@@ -827,8 +841,8 @@ func platformOrgRuntimeDoctorSection(ctx context.Context, mode platformOrgDoctor
 			detail = fmt.Sprintf("PLATFORM_EVENTS_TOPIC_ARN=%s, expected %s", actualTopicARN, expectedTopicARN)
 		}
 		checks = append(checks, platformOrgDoctorCheck{
-			Key:      "runtime.lambda-environment",
-			Title:    "activation Lambda points to the current events topic",
+			Key:      runtimeLambdaEnvironmentKey,
+			Title:    runtimeLambdaEnvironmentTitle,
 			Status:   status,
 			Detail:   detail,
 			Hint:     "repair the Lambda environment so it points to the current platform events topic ARN",

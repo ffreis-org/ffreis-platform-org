@@ -79,99 +79,125 @@ func (activationInventorySource) load(ctx context.Context) (inventorySourceResul
 	expected := make([]expectedAuditResource, 0, len(activation.CostAllocationTags)+1)
 	inactiveTags := make([]string, 0, len(activation.CostAllocationTags))
 	for _, key := range activation.CostAllocationTags {
-		resource := expectedAuditResource{
-			source:       "runtime",
-			address:      fmt.Sprintf("runtime.cost_allocation_tag[%q]", key),
-			resourceType: "costexplorer/cost-allocation-tag",
-			name:         key,
-			stack:        "platform-org",
-		}
-		switch active[key] {
-		case cetypes.CostAllocationTagStatusActive:
-			resource.status = "OK"
-		case cetypes.CostAllocationTagStatusInactive:
+		resource, inactive := activationCostTagResource(key, active[key], schedule, scheduleHealthy)
+		if inactive {
 			inactiveTags = append(inactiveTags, key)
-			resource.status = "MISSING"
-			resource.issues = []string{"cost allocation tag is inactive"}
-			if scheduleHealthy {
-				resource.status = "SCHEDULED"
-				resource.issues = []string{fmt.Sprintf("pending auto-activation schedule: %s", scheduleSummary(*schedule))}
-			} else if schedule != nil {
-				resource.status = "WARN"
-				resource.issues = []string{fmt.Sprintf("auto-activation schedule needs attention: %s", scheduleSummary(*schedule))}
-			}
-		default:
-			inactiveTags = append(inactiveTags, key)
-			resource.status = "MISSING"
-			resource.issues = []string{"cost allocation tag is not discovered yet"}
-			if scheduleHealthy {
-				resource.status = "SCHEDULED"
-				resource.issues = []string{fmt.Sprintf("pending auto-activation schedule: %s", scheduleSummary(*schedule))}
-			} else if schedule != nil {
-				resource.status = "WARN"
-				resource.issues = []string{fmt.Sprintf("auto-activation schedule needs attention: %s", scheduleSummary(*schedule))}
-			}
 		}
 		expected = append(expected, resource)
 	}
 
 	var extra []auditResource
 	if len(inactiveTags) > 0 {
-		scheduleResource := expectedAuditResource{
-			source:       "runtime",
-			address:      fmt.Sprintf("runtime.scheduler_schedule[%q]", activationScheduleName(d.org)),
-			resourceType: "scheduler/schedule",
-			name:         activationScheduleName(d.org),
-			stack:        "platform-org",
-		}
-		if schedule == nil {
-			scheduleResource.status = "MISSING"
-			scheduleResource.issues = []string{"auto-activation schedule not found while cost allocation tags are still inactive"}
-		} else {
-			scheduleResource.arn = schedule.ARN
-			scheduleResource.status = "SCHEDULED"
-			scheduleResource.issues = []string{scheduleSummary(*schedule)}
-			if schedule.State != schedulertypes.ScheduleStateEnabled {
-				scheduleResource.status = "WARN"
-				scheduleResource.issues = append(scheduleResource.issues, "schedule is not enabled")
-			}
-			if schedule.ActionAfterCompletion != schedulertypes.ActionAfterCompletionDelete {
-				scheduleResource.status = "WARN"
-				scheduleResource.issues = append(scheduleResource.issues, "schedule does not delete itself after completion")
-			}
-		}
-		expected = append(expected, scheduleResource)
+		expected = append(expected, activationScheduleExpectedResource(schedule))
 	} else if schedule != nil {
-		extra = append(extra, auditResource{
-			status:       "WARN",
-			source:       "runtime",
-			resourceType: "scheduler/schedule",
-			name:         schedule.Name,
-			arn:          schedule.ARN,
-			stack:        "platform-org",
-			issues:       []string{"activation schedule still exists even though all cost allocation tags are already active", scheduleSummary(*schedule)},
-		})
+		extra = append(extra, unexpectedActivationScheduleResource(*schedule))
 	}
 
 	for _, discoveredSchedule := range groupSchedules {
 		if discoveredSchedule.Name == activationScheduleName(d.org) {
 			continue
 		}
-		extra = append(extra, auditResource{
-			status:       "WARN",
-			source:       "runtime",
-			resourceType: "scheduler/schedule",
-			name:         discoveredSchedule.Name,
-			arn:          discoveredSchedule.ARN,
-			stack:        "platform-org",
-			issues:       []string{"unexpected pending schedule in platform-org scheduler group", scheduleSummary(discoveredSchedule)},
-		})
+		extra = append(extra, unexpectedGroupScheduleResource(discoveredSchedule))
 	}
 
 	return inventorySourceResult{
 		expected: expected,
 		extra:    extra,
 	}, nil
+}
+
+func activationCostTagResource(key string, status cetypes.CostAllocationTagStatus, schedule *activationScheduleDetails, scheduleHealthy bool) (expectedAuditResource, bool) {
+	resource := expectedAuditResource{
+		source:       "runtime",
+		address:      fmt.Sprintf("runtime.cost_allocation_tag[%q]", key),
+		resourceType: "costexplorer/cost-allocation-tag",
+		name:         key,
+		stack:        platformOrgStackTag,
+	}
+
+	switch status {
+	case cetypes.CostAllocationTagStatusActive:
+		resource.status = "OK"
+		return resource, false
+	case cetypes.CostAllocationTagStatusInactive:
+		resource.status = "MISSING"
+		resource.issues = []string{"cost allocation tag is inactive"}
+	default:
+		resource.status = "MISSING"
+		resource.issues = []string{"cost allocation tag is not discovered yet"}
+	}
+
+	applyActivationScheduleStatus(&resource, schedule, scheduleHealthy)
+	return resource, true
+}
+
+func applyActivationScheduleStatus(resource *expectedAuditResource, schedule *activationScheduleDetails, scheduleHealthy bool) {
+	if scheduleHealthy {
+		resource.status = "SCHEDULED"
+		resource.issues = []string{fmt.Sprintf("pending auto-activation schedule: %s", scheduleSummary(*schedule))}
+		return
+	}
+	if schedule != nil {
+		resource.status = "WARN"
+		resource.issues = []string{fmt.Sprintf("auto-activation schedule needs attention: %s", scheduleSummary(*schedule))}
+	}
+}
+
+func activationScheduleExpectedResource(schedule *activationScheduleDetails) expectedAuditResource {
+	resource := expectedAuditResource{
+		source:       "runtime",
+		address:      fmt.Sprintf("runtime.scheduler_schedule[%q]", activationScheduleName(d.org)),
+		resourceType: resourceTypeSchedulerSchedule,
+		name:         activationScheduleName(d.org),
+		stack:        platformOrgStackTag,
+	}
+	if schedule == nil {
+		resource.status = "MISSING"
+		resource.issues = []string{"auto-activation schedule not found while cost allocation tags are still inactive"}
+		return resource
+	}
+	resource.arn = schedule.ARN
+	resource.status = "SCHEDULED"
+	resource.issues = []string{scheduleSummary(*schedule)}
+	if schedule.State != schedulertypes.ScheduleStateEnabled {
+		resource.status = "WARN"
+		resource.issues = append(resource.issues, "schedule is not enabled")
+	}
+	if schedule.ActionAfterCompletion != schedulertypes.ActionAfterCompletionDelete {
+		resource.status = "WARN"
+		resource.issues = append(resource.issues, "schedule does not delete itself after completion")
+	}
+	return resource
+}
+
+func unexpectedActivationScheduleResource(schedule activationScheduleDetails) auditResource {
+	return auditResource{
+		status:       "WARN",
+		source:       "runtime",
+		resourceType: resourceTypeSchedulerSchedule,
+		name:         schedule.Name,
+		arn:          schedule.ARN,
+		stack:        platformOrgStackTag,
+		issues: []string{
+			"activation schedule still exists even though all cost allocation tags are already active",
+			scheduleSummary(schedule),
+		},
+	}
+}
+
+func unexpectedGroupScheduleResource(schedule activationScheduleDetails) auditResource {
+	return auditResource{
+		status:       "WARN",
+		source:       "runtime",
+		resourceType: resourceTypeSchedulerSchedule,
+		name:         schedule.Name,
+		arn:          schedule.ARN,
+		stack:        platformOrgStackTag,
+		issues: []string{
+			"unexpected pending schedule in platform-org scheduler group",
+			scheduleSummary(schedule),
+		},
+	}
 }
 
 func (activationInventorySource) cleanupNuke(ctx context.Context) ([]string, error) {

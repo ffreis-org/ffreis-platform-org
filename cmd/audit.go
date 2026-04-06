@@ -119,6 +119,11 @@ type auditResource struct {
 	issues       []string
 }
 
+const (
+	platformOrgStackTag           = "platform-org"
+	resourceTypeSchedulerSchedule = "scheduler/schedule"
+)
+
 var auditCmd = &cobra.Command{
 	Use:   "audit",
 	Short: "Audit expected platform resources, other managed stacks, and unowned resources",
@@ -223,26 +228,9 @@ func scanResources(ctx context.Context) ([]auditResource, error) {
 }
 
 func buildAuditSections(ctx context.Context, discovered []auditResource) (auditSections, error) {
-	sources := inventorySourcesFn()
-	expectedDefs := make([]expectedAuditResource, 0, 32)
-	extraFromSources := make([]auditResource, 0, 8)
-	for sourceOrder, source := range sources {
-		result, err := source.load(ctx)
-		if err != nil {
-			return auditSections{}, fmt.Errorf("%s inventory: %w", source.sourceID(), err)
-		}
-		for i := range result.expected {
-			result.expected[i].source = source.sourceID()
-			result.expected[i].sourceOrder = sourceOrder
-			result.expected[i].order = i
-		}
-		for i := range result.extra {
-			if result.extra[i].source == "" {
-				result.extra[i].source = source.sourceID()
-			}
-		}
-		expectedDefs = append(expectedDefs, result.expected...)
-		extraFromSources = append(extraFromSources, result.extra...)
+	expectedDefs, extraFromSources, err := loadExpectedAuditResources(ctx, inventorySourcesFn())
+	if err != nil {
+		return auditSections{}, err
 	}
 
 	liveManaged, liveErr := platformOrgCleanupTargetsForNukeFn(ctx)
@@ -250,90 +238,10 @@ func buildAuditSections(ctx context.Context, discovered []auditResource) (auditS
 		d.log.Warn("explicit platform-org live inventory failed during audit; falling back to tagging matches only", "err", liveErr)
 	}
 
-	discoveredByARN := make(map[string]auditResource, len(discovered))
-	discoveredByName := make(map[string][]auditResource, len(discovered))
-	addMatchCandidate := func(resource auditResource) {
-		if resource.arn != "" {
-			discoveredByARN[resource.arn] = resource
-		}
-		if resource.name != "" {
-			key := strings.ToLower(resource.name)
-			discoveredByName[key] = append(discoveredByName[key], resource)
-		}
-	}
-	for _, resource := range discovered {
-		addMatchCandidate(resource)
-	}
-	if liveErr == nil {
-		for _, resource := range liveManaged {
-			addMatchCandidate(resource)
-		}
-	}
-
-	matched := make(map[string]bool, len(discovered))
-	expected := make([]auditResource, 0, len(expectedDefs))
-	for _, def := range expectedDefs {
-		resource := auditResource{
-			source:       def.source,
-			address:      def.address,
-			resourceType: def.resourceType,
-			name:         def.name,
-			arn:          def.arn,
-			stack:        def.stack,
-			status:       def.status,
-			issues:       append([]string(nil), def.issues...),
-		}
-
-		discoveredResource, ok := matchExpectedAuditResource(def, discoveredByARN, discoveredByName)
-		if ok {
-			matched[matchedDiscoveredResourceKey(discoveredResource)] = true
-			if resource.name == "" {
-				resource.name = discoveredResource.name
-			}
-			if resource.arn == "" {
-				resource.arn = discoveredResource.arn
-			}
-			if resource.status == "MISSING" {
-				resource.status = "OK"
-				resource.issues = nil
-			}
-			if def.taggable && discoveredResource.status != "OK" {
-				resource.status = "WARN"
-				resource.issues = append(resource.issues, discoveredResource.issues...)
-			}
-		}
-		expected = append(expected, resource)
-	}
-
-	extra := make([]auditResource, 0, len(discovered))
-	extra = append(extra, extraFromSources...)
-	otherManaged := make([]auditResource, 0, len(discovered))
-	unowned := make([]auditResource, 0, len(discovered))
-	for _, resource := range discovered {
-		if matched[matchedDiscoveredResourceKey(resource)] {
-			continue
-		}
-		if resource.status == "UNOWNED" {
-			unowned = append(unowned, resource)
-			continue
-		}
-		if resource.stack == "platform-org" {
-			extra = append(extra, resource)
-			continue
-		}
-		otherManaged = append(otherManaged, resource)
-	}
-	if liveErr == nil {
-		for _, resource := range liveManaged {
-			if matched[matchedDiscoveredResourceKey(resource)] {
-				continue
-			}
-			if resource.stack != "platform-org" {
-				continue
-			}
-			extra = append(extra, resource)
-		}
-	}
+	discoveredByARN, discoveredByName := buildDiscoveredIndexes(discovered, liveManaged, liveErr == nil)
+	expected, matched := resolveExpectedAuditResources(expectedDefs, discoveredByARN, discoveredByName)
+	extra, otherManaged, unowned := partitionDiscoveredAuditResources(discovered, matched, extraFromSources)
+	extra = appendUnmatchedLiveManaged(extra, liveManaged, matched, liveErr == nil)
 	extra = dedupeAuditResources(extra)
 
 	sortExpectedResources(expected, expectedDefs)
@@ -341,6 +249,153 @@ func buildAuditSections(ctx context.Context, discovered []auditResource) (auditS
 	sortOtherManagedResources(otherManaged)
 	sortUnownedResources(unowned)
 
+	summary := summarizeAuditResources(expected, extra, otherManaged, unowned)
+
+	return auditSections{
+		expected:     expected,
+		extra:        extra,
+		otherManaged: otherManaged,
+		unowned:      unowned,
+		summary:      summary,
+	}, nil
+}
+
+func loadExpectedAuditResources(ctx context.Context, sources []inventorySource) ([]expectedAuditResource, []auditResource, error) {
+	expectedDefs := make([]expectedAuditResource, 0, 32)
+	extraFromSources := make([]auditResource, 0, 8)
+	for sourceOrder, source := range sources {
+		result, err := source.load(ctx)
+		if err != nil {
+			return nil, nil, fmt.Errorf("%s inventory: %w", source.sourceID(), err)
+		}
+		annotateExpectedAuditResources(result.expected, source.sourceID(), sourceOrder)
+		annotateExtraAuditResources(result.extra, source.sourceID())
+		expectedDefs = append(expectedDefs, result.expected...)
+		extraFromSources = append(extraFromSources, result.extra...)
+	}
+	return expectedDefs, extraFromSources, nil
+}
+
+func annotateExpectedAuditResources(resources []expectedAuditResource, sourceID string, sourceOrder int) {
+	for i := range resources {
+		resources[i].source = sourceID
+		resources[i].sourceOrder = sourceOrder
+		resources[i].order = i
+	}
+}
+
+func annotateExtraAuditResources(resources []auditResource, sourceID string) {
+	for i := range resources {
+		if resources[i].source == "" {
+			resources[i].source = sourceID
+		}
+	}
+}
+
+func buildDiscoveredIndexes(discovered, liveManaged []auditResource, includeLiveManaged bool) (map[string]auditResource, map[string][]auditResource) {
+	discoveredByARN := make(map[string]auditResource, len(discovered))
+	discoveredByName := make(map[string][]auditResource, len(discovered))
+	for _, resource := range discovered {
+		addDiscoveredMatchCandidate(discoveredByARN, discoveredByName, resource)
+	}
+	if includeLiveManaged {
+		for _, resource := range liveManaged {
+			addDiscoveredMatchCandidate(discoveredByARN, discoveredByName, resource)
+		}
+	}
+	return discoveredByARN, discoveredByName
+}
+
+func addDiscoveredMatchCandidate(discoveredByARN map[string]auditResource, discoveredByName map[string][]auditResource, resource auditResource) {
+	if resource.arn != "" {
+		discoveredByARN[resource.arn] = resource
+	}
+	if resource.name != "" {
+		key := strings.ToLower(resource.name)
+		discoveredByName[key] = append(discoveredByName[key], resource)
+	}
+}
+
+func resolveExpectedAuditResources(expectedDefs []expectedAuditResource, discoveredByARN map[string]auditResource, discoveredByName map[string][]auditResource) ([]auditResource, map[string]bool) {
+	matched := make(map[string]bool, len(expectedDefs))
+	expected := make([]auditResource, 0, len(expectedDefs))
+	for _, def := range expectedDefs {
+		resource, discoveredResource, ok := resolveExpectedAuditResource(def, discoveredByARN, discoveredByName)
+		if ok {
+			matched[matchedDiscoveredResourceKey(discoveredResource)] = true
+		}
+		expected = append(expected, resource)
+	}
+	return expected, matched
+}
+
+func resolveExpectedAuditResource(def expectedAuditResource, discoveredByARN map[string]auditResource, discoveredByName map[string][]auditResource) (auditResource, auditResource, bool) {
+	resource := auditResource{
+		source:       def.source,
+		address:      def.address,
+		resourceType: def.resourceType,
+		name:         def.name,
+		arn:          def.arn,
+		stack:        def.stack,
+		status:       def.status,
+		issues:       append([]string(nil), def.issues...),
+	}
+
+	discoveredResource, ok := matchExpectedAuditResource(def, discoveredByARN, discoveredByName)
+	if !ok {
+		return resource, auditResource{}, false
+	}
+	if resource.name == "" {
+		resource.name = discoveredResource.name
+	}
+	if resource.arn == "" {
+		resource.arn = discoveredResource.arn
+	}
+	if resource.status == "MISSING" {
+		resource.status = "OK"
+		resource.issues = nil
+	}
+	if def.taggable && discoveredResource.status != "OK" {
+		resource.status = "WARN"
+		resource.issues = append(resource.issues, discoveredResource.issues...)
+	}
+	return resource, discoveredResource, true
+}
+
+func partitionDiscoveredAuditResources(discovered []auditResource, matched map[string]bool, extraFromSources []auditResource) ([]auditResource, []auditResource, []auditResource) {
+	extra := append(make([]auditResource, 0, len(discovered)+len(extraFromSources)), extraFromSources...)
+	otherManaged := make([]auditResource, 0, len(discovered))
+	unowned := make([]auditResource, 0, len(discovered))
+	for _, resource := range discovered {
+		if matched[matchedDiscoveredResourceKey(resource)] {
+			continue
+		}
+		switch {
+		case resource.status == "UNOWNED":
+			unowned = append(unowned, resource)
+		case resource.stack == platformOrgStackTag:
+			extra = append(extra, resource)
+		default:
+			otherManaged = append(otherManaged, resource)
+		}
+	}
+	return extra, otherManaged, unowned
+}
+
+func appendUnmatchedLiveManaged(extra, liveManaged []auditResource, matched map[string]bool, includeLiveManaged bool) []auditResource {
+	if !includeLiveManaged {
+		return extra
+	}
+	for _, resource := range liveManaged {
+		if matched[matchedDiscoveredResourceKey(resource)] || resource.stack != platformOrgStackTag {
+			continue
+		}
+		extra = append(extra, resource)
+	}
+	return extra
+}
+
+func summarizeAuditResources(expected, extra, otherManaged, unowned []auditResource) auditSectionSummary {
 	summary := auditSectionSummary{}
 	for _, resource := range expected {
 		switch resource.status {
@@ -362,14 +417,7 @@ func buildAuditSections(ctx context.Context, discovered []auditResource) (auditS
 		}
 	}
 	summary.unowned = len(unowned)
-
-	return auditSections{
-		expected:     expected,
-		extra:        extra,
-		otherManaged: otherManaged,
-		unowned:      unowned,
-		summary:      summary,
-	}, nil
+	return summary
 }
 
 func dedupeAuditResources(resources []auditResource) []auditResource {
@@ -679,7 +727,7 @@ func parseExpectedPlatformOrgResources(data []byte) ([]expectedAuditResource, er
 			resourceType: resource.Type,
 			name:         terraformResourceDisplayName(resource),
 			arn:          terraformResourceARN(resource.Values),
-			stack:        "platform-org",
+			stack:        platformOrgStackTag,
 			status:       status,
 			taggable:     terraformResourceTaggable(resource.Type, resource.Values),
 			issues:       issues,

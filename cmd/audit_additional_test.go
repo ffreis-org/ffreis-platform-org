@@ -20,6 +20,14 @@ import (
 	"github.com/ffreis/platform-org/internal/activation"
 )
 
+const (
+	testPlatformOrgStack         = "platform-org"
+	testExpectedResourcesSection = "Expected Platform Org Resources"
+	testManualBucketName         = "manual-bucket"
+	testPlatformEventsName       = "platform-events"
+	testSchedulerScheduleType    = "scheduler/schedule"
+)
+
 type stubInventorySource struct {
 	id        string
 	loadFn    func(context.Context) (inventorySourceResult, error)
@@ -70,7 +78,7 @@ func TestScanResourcesHandlesPagination(t *testing.T) {
 				ResourceTagMappingList: []taggingtypes.ResourceTagMapping{
 					testResourceTagMapping(
 						"arn:aws:s3:::ffreis-tf-state-runtime",
-						testTag("Stack", "platform-org"),
+						testTag("Stack", testPlatformOrgStack),
 						testTag("Project", "platform"),
 						testTag("Environment", testEnv),
 						testTag("ManagedBy", "terraform"),
@@ -122,7 +130,7 @@ func TestScanResourcesReturnsWrappedError(t *testing.T) {
 
 func TestPrintAuditSectionRendersDefaultsAndTruncates(t *testing.T) {
 	buf := captureAuditOutput(t)
-	printAuditSection(newWriterOutput(buf, buf, nil), "Expected Platform Org Resources", []auditResource{{
+	printAuditSection(newWriterOutput(buf, buf, nil), testExpectedResourcesSection, []auditResource{{
 		status:       "WARN",
 		resourceType: "very-long-resource-type-that-should-truncate",
 		name:         "very-long-resource-name-that-should-also-truncate",
@@ -130,7 +138,7 @@ func TestPrintAuditSectionRendersDefaultsAndTruncates(t *testing.T) {
 	}})
 
 	out := buf.String()
-	if !strings.Contains(out, "Expected Platform Org Resources") || !strings.Contains(out, "STATUS") || !strings.Contains(out, "ISSUES") {
+	if !strings.Contains(out, testExpectedResourcesSection) || !strings.Contains(out, "STATUS") || !strings.Contains(out, "ISSUES") {
 		t.Fatalf("missing table header: %q", out)
 	}
 	if !strings.Contains(out, "(no tag)") {
@@ -301,7 +309,7 @@ func TestBuildAuditSectionsSeparatesExpectedOtherManagedAndUnowned(t *testing.T)
 								address:      "aws_s3_bucket.runtime",
 								resourceType: "aws_s3_bucket",
 								name:         "runtime-bucket",
-								stack:        "platform-org",
+								stack:        testPlatformOrgStack,
 								status:       "OK",
 								taggable:     true,
 							},
@@ -309,7 +317,7 @@ func TestBuildAuditSectionsSeparatesExpectedOtherManagedAndUnowned(t *testing.T)
 								address:      "aws_iam_role.missing",
 								resourceType: "aws_iam_role",
 								name:         "missing-role",
-								stack:        "platform-org",
+								stack:        testPlatformOrgStack,
 								status:       "MISSING",
 							},
 						},
@@ -324,7 +332,7 @@ func TestBuildAuditSectionsSeparatesExpectedOtherManagedAndUnowned(t *testing.T)
 				status:       "OK",
 				resourceType: "iam/role",
 				name:         "missing-role",
-				stack:        "platform-org",
+				stack:        testPlatformOrgStack,
 			},
 		}, nil
 	}
@@ -334,25 +342,25 @@ func TestBuildAuditSectionsSeparatesExpectedOtherManagedAndUnowned(t *testing.T)
 			status:       "WARN",
 			resourceType: "s3",
 			name:         "runtime-bucket",
-			stack:        "platform-org",
+			stack:        testPlatformOrgStack,
 			issues:       []string{"missing tag: Project"},
 		},
 		{
 			status:       "OK",
 			resourceType: "sns",
-			name:         "platform-events",
+			name:         testPlatformEventsName,
 			stack:        "(bootstrap)",
 		},
 		{
 			status:       "OK",
-			resourceType: "scheduler/schedule",
+			resourceType: testSchedulerScheduleType,
 			name:         "platform-org-ephemeral",
-			stack:        "platform-org",
+			stack:        testPlatformOrgStack,
 		},
 		{
 			status:       "UNOWNED",
 			resourceType: "s3",
-			name:         "manual-bucket",
+			name:         testManualBucketName,
 		},
 	})
 	if err != nil {
@@ -368,7 +376,7 @@ func TestBuildAuditSectionsSeparatesExpectedOtherManagedAndUnowned(t *testing.T)
 	if sections.expected[0].name != "missing-role" {
 		t.Fatalf("expected explicit live inventory to turn missing-role into an expected OK row: %#v", sections.expected[0])
 	}
-	if sections.extra[0].name != "platform-org-ephemeral" || sections.otherManaged[0].name != "platform-events" || sections.unowned[0].name != "manual-bucket" {
+	if sections.extra[0].name != "platform-org-ephemeral" || sections.otherManaged[0].name != testPlatformEventsName || sections.unowned[0].name != testManualBucketName {
 		t.Fatalf("unexpected non-expected sections: extra=%#v other=%#v unowned=%#v", sections.extra, sections.otherManaged, sections.unowned)
 	}
 	if sections.summary.expectedOK != 1 || sections.summary.expectedScheduled != 0 || sections.summary.expectedWarn != 1 || sections.summary.expectedMissing != 0 {
@@ -399,9 +407,9 @@ func TestAuditCommandRunEPrintsSectionSummary(t *testing.T) {
 	budgetCalled := false
 	scanResourcesFn = func(context.Context) ([]auditResource, error) {
 		return []auditResource{
-			{status: "OK", resourceType: "sns", name: "platform-events", stack: "(bootstrap)"},
-			{status: "OK", resourceType: "scheduler/schedule", name: "ephemeral-schedule", stack: "platform-org"},
-			{status: "UNOWNED", resourceType: "s3", name: "manual-bucket"},
+			{status: "OK", resourceType: "sns", name: testPlatformEventsName, stack: "(bootstrap)"},
+			{status: "OK", resourceType: testSchedulerScheduleType, name: "ephemeral-schedule", stack: testPlatformOrgStack},
+			{status: "UNOWNED", resourceType: "s3", name: testManualBucketName},
 		}, nil
 	}
 	inventorySourcesFn = func() []inventorySource {
@@ -415,14 +423,14 @@ func TestAuditCommandRunEPrintsSectionSummary(t *testing.T) {
 								address:      "aws_organizations_organization.this",
 								resourceType: "aws_organizations_organization",
 								name:         "organization",
-								stack:        "platform-org",
+								stack:        testPlatformOrgStack,
 								status:       "OK",
 							},
 							{
 								address:      "aws_iam_role.missing",
 								resourceType: "aws_iam_role",
 								name:         "missing-role",
-								stack:        "platform-org",
+								stack:        testPlatformOrgStack,
 								status:       "MISSING",
 							},
 						},
@@ -459,7 +467,7 @@ func TestAuditCommandRunEPrintsSectionSummary(t *testing.T) {
 		t.Fatal("expected budget printer to run")
 	}
 	for _, want := range []string{
-		"Expected Platform Org Resources",
+		testExpectedResourcesSection,
 		"Extra Platform Org Resources",
 		"Other Managed Resources",
 		"Unowned Resources",
@@ -560,7 +568,7 @@ func TestActivationInventorySourceShowsPendingScheduleAndInactiveTags(t *testing
 	if len(result.expected) != len(activation.CostAllocationTags)+1 {
 		t.Fatalf("expected runtime resources count: got %d", len(result.expected))
 	}
-	if result.expected[len(result.expected)-1].resourceType != "scheduler/schedule" || result.expected[len(result.expected)-1].status != "SCHEDULED" {
+	if result.expected[len(result.expected)-1].resourceType != testSchedulerScheduleType || result.expected[len(result.expected)-1].status != "SCHEDULED" {
 		t.Fatalf("expected final schedule row, got %#v", result.expected[len(result.expected)-1])
 	}
 	var scheduled bool

@@ -34,6 +34,11 @@ const (
 	purgeFailureRetryable
 )
 
+const (
+	purgeAlreadyAbsentFormat = "%s %s already absent"
+	purgeRerunWithForceHint  = "; re-run with --force"
+)
+
 // purgeManualError wraps errors that require operator intervention — the
 // resource exists but cannot be deleted automatically (e.g. ECS-managed
 // EventBridge rules). The hint explains what to do manually.
@@ -369,7 +374,7 @@ code required. Unsupported resource types are listed but skipped.
 				switch classifyPurgeDeleteError(err) {
 				case purgeFailureGone:
 					gone++
-					out.Status("muted", "skip", fmt.Sprintf("%s %s already absent", t.resource.resourceType, t.resource.name))
+					out.Status("muted", "skip", fmt.Sprintf(purgeAlreadyAbsentFormat, t.resource.resourceType, t.resource.name))
 				case purgeFailureManual:
 					manual++
 					out.Status("warn", "skip", fmt.Sprintf("%s %s requires manual deletion", t.resource.resourceType, t.resource.name))
@@ -377,7 +382,7 @@ code required. Unsupported resource types are listed but skipped.
 					blocked++
 					detail := fmt.Sprintf("%s %s is blocked by dependent resources", t.resource.resourceType, t.resource.name)
 					if !purgeForce {
-						detail += "; re-run with --force"
+						detail += purgeRerunWithForceHint
 					}
 					out.Status("warn", "wait", detail)
 				case purgeFailureFatal:
@@ -405,7 +410,7 @@ code required. Unsupported resource types are listed but skipped.
 				switch classifyPurgeDeleteError(err) {
 				case purgeFailureGone:
 					gone++
-					out.Status("muted", "skip", fmt.Sprintf("%s %s already absent", t.resource.resourceType, t.resource.name))
+					out.Status("muted", "skip", fmt.Sprintf(purgeAlreadyAbsentFormat, t.resource.resourceType, t.resource.name))
 				case purgeFailureManual:
 					manual++
 					out.Status("warn", "skip", fmt.Sprintf("%s %s requires manual deletion", t.resource.resourceType, t.resource.name))
@@ -413,7 +418,7 @@ code required. Unsupported resource types are listed but skipped.
 					blocked++
 					detail := fmt.Sprintf("%s %s is blocked by dependent resources", t.resource.resourceType, t.resource.name)
 					if !purgeForce {
-						detail += "; re-run with --force"
+						detail += purgeRerunWithForceHint
 					}
 					out.Status("warn", "wait", detail)
 				default:
@@ -426,7 +431,7 @@ code required. Unsupported resource types are listed but skipped.
 				switch classifyPurgeDeleteError(err) {
 				case purgeFailureGone:
 					gone++
-					out.Status("muted", "skip", fmt.Sprintf("%s %s already absent", t.resource.resourceType, t.resource.name))
+					out.Status("muted", "skip", fmt.Sprintf(purgeAlreadyAbsentFormat, t.resource.resourceType, t.resource.name))
 				case purgeFailureManual:
 					manual++
 					out.Status("warn", "skip", fmt.Sprintf("%s %s requires manual deletion", t.resource.resourceType, t.resource.name))
@@ -434,7 +439,7 @@ code required. Unsupported resource types are listed but skipped.
 					blocked++
 					detail := fmt.Sprintf("%s %s is blocked by dependent resources", t.resource.resourceType, t.resource.name)
 					if !purgeForce {
-						detail += "; re-run with --force"
+						detail += purgeRerunWithForceHint
 					}
 					out.Status("warn", "wait", detail)
 				default:
