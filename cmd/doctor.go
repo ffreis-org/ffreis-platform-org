@@ -97,7 +97,21 @@ const (
 )
 
 var (
-	platformOrgDoctorRunFn = runPlatformOrgDoctor
+	platformOrgDoctorRunFn              = runPlatformOrgDoctor
+	platformOrgBackendDoctorSectionFn   = platformOrgBackendDoctorSection
+	platformOrgStateDoctorSectionFn     = platformOrgStateDoctorSection
+	platformOrgRuntimeDoctorSectionFn   = platformOrgRuntimeDoctorSection
+	platformOrgInventoryDoctorSectionFn = platformOrgInventoryDoctorSection
+	loadPlatformOrgStateObjectsFn       = loadPlatformOrgStateObjects
+	getInlineRolePolicyDocumentFn       = getInlineRolePolicyDocument
+	activationScheduleFn                = activationSchedule
+	s3BucketExistsFn                    = s3BucketExists
+	dynamoTableExistsFn                 = dynamoTableExists
+	getLambdaFunctionFn                 = func(ctx context.Context, name string) (*lambda.GetFunctionOutput, error) {
+		return lambda.NewFromConfig(d.awsCfg).GetFunction(ctx, &lambda.GetFunctionInput{FunctionName: sdkaws.String(name)})
+	}
+	logGroupExistsFn       = logGroupExists
+	buildAuditSectionsFn   = buildAuditSections
 	platformOrgDoctorModes = struct {
 		command platformOrgDoctorMode
 		audit   platformOrgDoctorMode
@@ -182,28 +196,28 @@ func init() {
 func runPlatformOrgDoctor(ctx context.Context, mode platformOrgDoctorMode) (PlatformOrgDoctorReport, error) {
 	report := PlatformOrgDoctorReport{Mode: mode.Name}
 	if mode.IncludeBackend {
-		section, err := platformOrgBackendDoctorSection(ctx)
+		section, err := platformOrgBackendDoctorSectionFn(ctx)
 		if err != nil {
 			return PlatformOrgDoctorReport{}, err
 		}
 		report.Sections = append(report.Sections, section)
 	}
 	if mode.IncludeState {
-		section, err := platformOrgStateDoctorSection(ctx, mode)
+		section, err := platformOrgStateDoctorSectionFn(ctx, mode)
 		if err != nil {
 			return PlatformOrgDoctorReport{}, err
 		}
 		report.Sections = append(report.Sections, section)
 	}
 	if mode.IncludeRuntime {
-		section, err := platformOrgRuntimeDoctorSection(ctx, mode)
+		section, err := platformOrgRuntimeDoctorSectionFn(ctx, mode)
 		if err != nil {
 			return PlatformOrgDoctorReport{}, err
 		}
 		report.Sections = append(report.Sections, section)
 	}
 	if mode.IncludeInventory {
-		section, err := platformOrgInventoryDoctorSection(ctx)
+		section, err := platformOrgInventoryDoctorSectionFn(ctx)
 		if err != nil {
 			return PlatformOrgDoctorReport{}, err
 		}
@@ -447,7 +461,7 @@ func platformOrgBackendDoctorSection(ctx context.Context) (platformOrgDoctorSect
 		Blocking: identityStatus == "fail",
 	})
 
-	bucketExists, bucketErr := s3BucketExists(ctx, cfg.BucketName)
+	bucketExists, bucketErr := s3BucketExistsFn(ctx, cfg.BucketName)
 	checks = append(checks, platformOrgDoctorCheck{
 		Key:      "backend.bucket",
 		Title:    "root backend bucket exists",
@@ -458,7 +472,7 @@ func platformOrgBackendDoctorSection(ctx context.Context) (platformOrgDoctorSect
 		Blocking: bucketErr != nil || !bucketExists,
 	})
 
-	tableExists, tableErr := dynamoTableExists(ctx, cfg.TableName)
+	tableExists, tableErr := dynamoTableExistsFn(ctx, cfg.TableName)
 	checks = append(checks, platformOrgDoctorCheck{
 		Key:      "backend.lock-table",
 		Title:    "root backend lock table exists",
@@ -599,7 +613,7 @@ func platformOrgStateDoctorSection(ctx context.Context, mode platformOrgDoctorMo
 		return platformOrgDoctorSection{}, err
 	}
 
-	stateResources, stateErr := loadPlatformOrgStateObjects(ctx, cfg)
+	stateResources, stateErr := loadPlatformOrgStateObjectsFn(ctx, cfg)
 	liveResources, liveErr := platformOrgCleanupTargetsForNukeFn(ctx)
 	checks := []platformOrgDoctorCheck{}
 
@@ -802,7 +816,7 @@ func checkRuntimeLambdaLogGroup(exists bool, err error, mode platformOrgDoctorMo
 }
 
 func platformOrgRuntimeDoctorSection(ctx context.Context, mode platformOrgDoctorMode) (platformOrgDoctorSection, error) {
-	schedule, err := activationSchedule(ctx, d.org)
+	schedule, err := activationScheduleFn(ctx, d.org)
 	if err != nil {
 		return platformOrgDoctorSection{}, fmt.Errorf("inspect activation schedule: %w", err)
 	}
@@ -815,10 +829,10 @@ func platformOrgRuntimeDoctorSection(ctx context.Context, mode platformOrgDoctor
 	expectedLogGroup := activateLambdaLogGroupName(d.org)
 	expectedLogPattern := fmt.Sprintf("arn:aws:logs:%s:%s:log-group:%s:*", d.region, d.accountID, expectedLogGroup)
 
-	rolePolicyDoc, rolePolicyExists, rolePolicyErr := getInlineRolePolicyDocument(ctx, expectedScheduleRole, "invoke-activate-lambda")
-	lambdaRolePolicyDoc, lambdaRolePolicyExists, lambdaRolePolicyErr := getInlineRolePolicyDocument(ctx, expectedLambdaName, "activate-cost-tags")
-	lambdaOut, lambdaErr := lambda.NewFromConfig(d.awsCfg).GetFunction(ctx, &lambda.GetFunctionInput{FunctionName: sdkaws.String(expectedLambdaName)})
-	logExists, logErr := logGroupExists(ctx, expectedLogGroup)
+	rolePolicyDoc, rolePolicyExists, rolePolicyErr := getInlineRolePolicyDocumentFn(ctx, expectedScheduleRole, "invoke-activate-lambda")
+	lambdaRolePolicyDoc, lambdaRolePolicyExists, lambdaRolePolicyErr := getInlineRolePolicyDocumentFn(ctx, expectedLambdaName, "activate-cost-tags")
+	lambdaOut, lambdaErr := getLambdaFunctionFn(ctx, expectedLambdaName)
+	logExists, logErr := logGroupExistsFn(ctx, expectedLogGroup)
 
 	checks := []platformOrgDoctorCheck{
 		checkRuntimeActivationSchedule(schedule, d.org, expectedLambdaARN, expectedScheduleRoleARN),
@@ -836,7 +850,7 @@ func platformOrgInventoryDoctorSection(ctx context.Context) (platformOrgDoctorSe
 	if err != nil {
 		return platformOrgDoctorSection{}, err
 	}
-	sections, err := buildAuditSections(ctx, discovered)
+	sections, err := buildAuditSectionsFn(ctx, discovered)
 	if err != nil {
 		return platformOrgDoctorSection{}, err
 	}

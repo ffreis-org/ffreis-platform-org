@@ -14,9 +14,10 @@ import (
 )
 
 const (
-	testAuditBucketARN = "arn:aws:s3:::my-bucket"
-	testAuditOrgName   = "my-org"
-	testAuditGroupName = "my-org-platform-org"
+	testAuditBucketARN                  = "arn:aws:s3:::my-bucket"
+	testAuditOrgName                    = "my-org"
+	testAuditGroupName                  = "my-org-platform-org"
+	testUnexpectedMatchedResourceErrorf = "unexpected matched resource: %#v"
 )
 
 // ---------------------------------------------------------------------------
@@ -132,7 +133,7 @@ func TestMatchExpectedAuditResourceByARN(t *testing.T) {
 		t.Fatal("expected match by ARN")
 	}
 	if got.arn != "arn:aws:s3:::bucket" {
-		t.Fatalf("unexpected matched resource: %#v", got)
+		t.Fatalf(testUnexpectedMatchedResourceErrorf, got)
 	}
 }
 
@@ -153,7 +154,7 @@ func TestMatchExpectedAuditResourceNameOnlyOneCandidate(t *testing.T) {
 		t.Fatal("expected match with single candidate")
 	}
 	if got.name != "my-resource" {
-		t.Fatalf("unexpected matched resource: %#v", got)
+		t.Fatalf(testUnexpectedMatchedResourceErrorf, got)
 	}
 }
 
@@ -167,7 +168,7 @@ func TestMatchExpectedAuditResourceNameMultipleCandidatesStackMatch(t *testing.T
 		t.Fatal("expected match by stack disambiguation")
 	}
 	if got.stack != platformOrgStackTag {
-		t.Fatalf("unexpected matched resource: %#v", got)
+		t.Fatalf(testUnexpectedMatchedResourceErrorf, got)
 	}
 }
 

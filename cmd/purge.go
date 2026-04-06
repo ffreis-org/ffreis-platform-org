@@ -91,6 +91,7 @@ var (
 	}
 	purgeStdout io.Writer = os.Stdout
 	purgeForce  bool
+	purgeAfter  = time.After
 )
 
 func iamToCloudControl(resourceType, name, arn string) (string, string) {
@@ -229,7 +230,7 @@ func waitForDelete(ctx context.Context, cc cloudControlAPI, token string) error 
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
-				case <-time.After(2 * time.Second):
+				case <-purgeAfter(2 * time.Second):
 					continue
 				}
 			}
@@ -248,7 +249,7 @@ func waitForDelete(ctx context.Context, cc cloudControlAPI, token string) error 
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(2 * time.Second):
+		case <-purgeAfter(2 * time.Second):
 		}
 	}
 }
@@ -309,7 +310,7 @@ func deleteResourceWithRetry(ctx context.Context, cc cloudControlAPI, input *clo
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
-		case <-time.After(backoff):
+		case <-purgeAfter(backoff):
 		}
 		if backoff < 8*time.Second {
 			backoff *= 2

@@ -12,6 +12,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 )
 
+const (
+	testIAMActionKey = "Action"
+	testIAMRoleName  = "my-role"
+)
+
 func testIAMClient(t *testing.T, handler http.HandlerFunc) *iam.Client {
 	t.Helper()
 	server := httptest.NewServer(handler)
@@ -56,7 +61,7 @@ func TestDeleteAllInlineRolePoliciesOtherListError(t *testing.T) {
 		w.WriteHeader(http.StatusForbidden)
 		_, _ = fmt.Fprintln(w, iamXMLError("AccessDenied", "Access denied"))
 	})
-	if err := deleteAllInlineRolePolicies(context.Background(), client, "my-role"); err == nil {
+	if err := deleteAllInlineRolePolicies(context.Background(), client, testIAMRoleName); err == nil {
 		t.Fatal("expected error for access denied on list")
 	}
 }
@@ -66,7 +71,7 @@ func TestDeleteAllInlineRolePoliciesEmptyList(t *testing.T) {
 	client := testIAMClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeTextXML)
 		_ = r.ParseForm()
-		if r.FormValue("Action") != "ListRolePolicies" {
+		if r.FormValue(testIAMActionKey) != "ListRolePolicies" {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -78,7 +83,7 @@ func TestDeleteAllInlineRolePoliciesEmptyList(t *testing.T) {
   <ResponseMetadata><RequestId>abc</RequestId></ResponseMetadata>
 </ListRolePoliciesResponse>`)
 	})
-	if err := deleteAllInlineRolePolicies(context.Background(), client, "my-role"); err != nil {
+	if err := deleteAllInlineRolePolicies(context.Background(), client, testIAMRoleName); err != nil {
 		t.Fatalf("expected nil for empty policy list, got: %v", err)
 	}
 }
@@ -89,7 +94,7 @@ func TestDeleteAllInlineRolePoliciesDeletesOnePolicy(t *testing.T) {
 	client := testIAMClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeTextXML)
 		_ = r.ParseForm()
-		switch r.FormValue("Action") {
+		switch r.FormValue(testIAMActionKey) {
 		case "ListRolePolicies":
 			_, _ = fmt.Fprint(w, `<ListRolePoliciesResponse>
   <ListRolePoliciesResult>
@@ -107,8 +112,8 @@ func TestDeleteAllInlineRolePoliciesDeletesOnePolicy(t *testing.T) {
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 	})
-	if err := deleteAllInlineRolePolicies(context.Background(), client, "my-role"); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if err := deleteAllInlineRolePolicies(context.Background(), client, testIAMRoleName); err != nil {
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if deleteCalls != 1 {
 		t.Fatalf("expected 1 delete call, got %d", deleteCalls)
@@ -121,7 +126,7 @@ func TestDeleteAllInlineRolePoliciesTruncatedList(t *testing.T) {
 	client := testIAMClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeTextXML)
 		_ = r.ParseForm()
-		switch r.FormValue("Action") {
+		switch r.FormValue(testIAMActionKey) {
 		case "ListRolePolicies":
 			listCalls++
 			if listCalls == 1 {
@@ -151,8 +156,8 @@ func TestDeleteAllInlineRolePoliciesTruncatedList(t *testing.T) {
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 	})
-	if err := deleteAllInlineRolePolicies(context.Background(), client, "my-role"); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if err := deleteAllInlineRolePolicies(context.Background(), client, testIAMRoleName); err != nil {
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if listCalls != 2 {
 		t.Fatalf("expected 2 list calls, got %d", listCalls)
@@ -167,7 +172,7 @@ func TestDeleteAllInlineRolePoliciesDeleteNotFound(t *testing.T) {
 	client := testIAMClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeTextXML)
 		_ = r.ParseForm()
-		switch r.FormValue("Action") {
+		switch r.FormValue(testIAMActionKey) {
 		case "ListRolePolicies":
 			_, _ = fmt.Fprint(w, `<ListRolePoliciesResponse>
   <ListRolePoliciesResult>
@@ -183,7 +188,7 @@ func TestDeleteAllInlineRolePoliciesDeleteNotFound(t *testing.T) {
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 	})
-	if err := deleteAllInlineRolePolicies(context.Background(), client, "my-role"); err != nil {
+	if err := deleteAllInlineRolePolicies(context.Background(), client, testIAMRoleName); err != nil {
 		t.Fatalf("delete not-found should be treated as ok, got: %v", err)
 	}
 }
@@ -193,7 +198,7 @@ func TestDeleteAllInlineRolePoliciesDeleteError(t *testing.T) {
 	client := testIAMClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeTextXML)
 		_ = r.ParseForm()
-		switch r.FormValue("Action") {
+		switch r.FormValue(testIAMActionKey) {
 		case "ListRolePolicies":
 			_, _ = fmt.Fprint(w, `<ListRolePoliciesResponse>
   <ListRolePoliciesResult>
@@ -209,7 +214,7 @@ func TestDeleteAllInlineRolePoliciesDeleteError(t *testing.T) {
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 	})
-	if err := deleteAllInlineRolePolicies(context.Background(), client, "my-role"); err == nil {
+	if err := deleteAllInlineRolePolicies(context.Background(), client, testIAMRoleName); err == nil {
 		t.Fatal("expected error from delete failure")
 	}
 }
@@ -235,7 +240,7 @@ func TestDetachAllManagedRolePoliciesOtherListError(t *testing.T) {
 		w.WriteHeader(http.StatusForbidden)
 		_, _ = fmt.Fprintln(w, iamXMLError("AccessDenied", "Access denied"))
 	})
-	if err := detachAllManagedRolePolicies(context.Background(), client, "my-role"); err == nil {
+	if err := detachAllManagedRolePolicies(context.Background(), client, testIAMRoleName); err == nil {
 		t.Fatal("expected error for access denied on list")
 	}
 }
@@ -245,7 +250,7 @@ func TestDetachAllManagedRolePoliciesEmptyList(t *testing.T) {
 	client := testIAMClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeTextXML)
 		_ = r.ParseForm()
-		if r.FormValue("Action") != "ListAttachedRolePolicies" {
+		if r.FormValue(testIAMActionKey) != "ListAttachedRolePolicies" {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -257,7 +262,7 @@ func TestDetachAllManagedRolePoliciesEmptyList(t *testing.T) {
   <ResponseMetadata><RequestId>abc</RequestId></ResponseMetadata>
 </ListAttachedRolePoliciesResponse>`)
 	})
-	if err := detachAllManagedRolePolicies(context.Background(), client, "my-role"); err != nil {
+	if err := detachAllManagedRolePolicies(context.Background(), client, testIAMRoleName); err != nil {
 		t.Fatalf("expected nil for empty attached policy list, got: %v", err)
 	}
 }
@@ -268,7 +273,7 @@ func TestDetachAllManagedRolePoliciesDetachesOnePolicy(t *testing.T) {
 	client := testIAMClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeTextXML)
 		_ = r.ParseForm()
-		switch r.FormValue("Action") {
+		switch r.FormValue(testIAMActionKey) {
 		case "ListAttachedRolePolicies":
 			_, _ = fmt.Fprint(w, `<ListAttachedRolePoliciesResponse>
   <ListAttachedRolePoliciesResult>
@@ -291,8 +296,8 @@ func TestDetachAllManagedRolePoliciesDetachesOnePolicy(t *testing.T) {
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 	})
-	if err := detachAllManagedRolePolicies(context.Background(), client, "my-role"); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if err := detachAllManagedRolePolicies(context.Background(), client, testIAMRoleName); err != nil {
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if detachCalls != 1 {
 		t.Fatalf("expected 1 detach call, got %d", detachCalls)
@@ -305,7 +310,7 @@ func TestDetachAllManagedRolePoliciesTruncatedList(t *testing.T) {
 	client := testIAMClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeTextXML)
 		_ = r.ParseForm()
-		switch r.FormValue("Action") {
+		switch r.FormValue(testIAMActionKey) {
 		case "ListAttachedRolePolicies":
 			listCalls++
 			if listCalls == 1 {
@@ -345,8 +350,8 @@ func TestDetachAllManagedRolePoliciesTruncatedList(t *testing.T) {
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 	})
-	if err := detachAllManagedRolePolicies(context.Background(), client, "my-role"); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if err := detachAllManagedRolePolicies(context.Background(), client, testIAMRoleName); err != nil {
+		t.Fatalf(errUnexpectedError, err)
 	}
 	if listCalls != 2 {
 		t.Fatalf("expected 2 list calls, got %d", listCalls)
@@ -361,7 +366,7 @@ func TestDetachAllManagedRolePoliciesDetachNotFound(t *testing.T) {
 	client := testIAMClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeTextXML)
 		_ = r.ParseForm()
-		switch r.FormValue("Action") {
+		switch r.FormValue(testIAMActionKey) {
 		case "ListAttachedRolePolicies":
 			_, _ = fmt.Fprint(w, `<ListAttachedRolePoliciesResponse>
   <ListAttachedRolePoliciesResult>
@@ -382,7 +387,7 @@ func TestDetachAllManagedRolePoliciesDetachNotFound(t *testing.T) {
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 	})
-	if err := detachAllManagedRolePolicies(context.Background(), client, "my-role"); err != nil {
+	if err := detachAllManagedRolePolicies(context.Background(), client, testIAMRoleName); err != nil {
 		t.Fatalf("detach not-found should be treated as ok, got: %v", err)
 	}
 }
@@ -392,7 +397,7 @@ func TestDetachAllManagedRolePoliciesDetachError(t *testing.T) {
 	client := testIAMClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set(testHTTPHeaderContentType, testHTTPContentTypeTextXML)
 		_ = r.ParseForm()
-		switch r.FormValue("Action") {
+		switch r.FormValue(testIAMActionKey) {
 		case "ListAttachedRolePolicies":
 			_, _ = fmt.Fprint(w, `<ListAttachedRolePoliciesResponse>
   <ListAttachedRolePoliciesResult>
@@ -413,7 +418,7 @@ func TestDetachAllManagedRolePoliciesDetachError(t *testing.T) {
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 	})
-	if err := detachAllManagedRolePolicies(context.Background(), client, "my-role"); err == nil {
+	if err := detachAllManagedRolePolicies(context.Background(), client, testIAMRoleName); err == nil {
 		t.Fatal("expected error from detach failure")
 	}
 }
