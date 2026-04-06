@@ -20,6 +20,8 @@ import (
 const (
 	testHTTPHeaderContentType    = "Content-Type"
 	testHTTPContentTypeAMZJSON11 = "application/x-amz-json-1.1"
+	testHTTPContentTypeTextXML   = "text/xml"
+	testHTTPContentTypeXML       = "application/xml"
 )
 
 func testS3DeleteClient(t *testing.T, handler http.HandlerFunc) *s3.Client {

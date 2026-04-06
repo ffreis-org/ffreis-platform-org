@@ -855,6 +855,9 @@ func lockItemString(item map[string]dbtypes.AttributeValue, field string) string
 }
 
 func backupLockItems(items []map[string]dbtypes.AttributeValue, path string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		return err
+	}
 	decoded := make([]map[string]any, 0, len(items))
 	for _, item := range items {
 		var value map[string]any
