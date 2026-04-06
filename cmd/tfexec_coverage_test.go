@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -71,14 +72,8 @@ func TestBackendArgsOmitsLocalWhenAbsent(t *testing.T) {
 // containsAny returns true when s contains any of the given substrings.
 func containsAny(s string, subs ...string) bool {
 	for _, sub := range subs {
-		if len(sub) > 0 {
-			found := true
-			for i := 0; i <= len(s)-len(sub); i++ {
-				if s[i:i+len(sub)] == sub {
-					return true
-				}
-			}
-			_ = found
+		if sub != "" && strings.Contains(s, sub) {
+			return true
 		}
 	}
 	return false
