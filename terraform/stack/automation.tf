@@ -107,6 +107,10 @@ resource "aws_lambda_function" "activate_cost_tags" {
   runtime          = "provided.al2023"
   timeout          = 30
 
+  tracing_config {
+    mode = "Active"
+  }
+
   environment {
     variables = {
       PLATFORM_EVENTS_TOPIC_ARN = data.aws_sns_topic.platform_events.arn
