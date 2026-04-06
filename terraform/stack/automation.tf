@@ -50,13 +50,17 @@ resource "aws_iam_role_policy" "activate_lambda" {
   name = "activate-cost-tags"
   role = aws_iam_role.activate_lambda.id
 
+  #checkov:skip=CKV_AWS_355:CE cost-allocation-tag actions and logs:CreateLogGroup do not support resource-level restrictions; AWS rejects any ARN other than '*' for these.
+  #checkov:skip=CKV_AWS_290:logs:CreateLogGroup does not support resource-level restrictions (AWS limitation); all other write actions are scoped to specific resources.
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
-        Sid      = "CostExplorer"
-        Effect   = "Allow"
-        Action   = ["ce:UpdateCostAllocationTagsStatus", "ce:ListCostAllocationTags"]
+        Sid    = "CostExplorer"
+        Effect = "Allow"
+        Action = ["ce:UpdateCostAllocationTagsStatus", "ce:ListCostAllocationTags"]
+        # AWS Cost Explorer does not support resource-level restrictions; '*' is required.
         Resource = "*"
       },
       {
@@ -70,7 +74,7 @@ resource "aws_iam_role_policy" "activate_lambda" {
         Sid    = "LogsWrite"
         Effect = "Allow"
         Action = ["logs:CreateLogStream", "logs:PutLogEvents"]
-        # Scoped to Lambda log group pattern to follow least-privilege.
+        # Scoped to this Lambda's log group to follow least-privilege.
         Resource = "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${var.org}-activate-cost-tags:*"
       },
       {
@@ -89,8 +93,9 @@ resource "aws_iam_role_policy" "activate_lambda" {
 
 resource "aws_cloudwatch_log_group" "activate_lambda" {
   name              = "/aws/lambda/${var.org}-activate-cost-tags"
-  retention_in_days = 14
-  tags              = merge(local.common_tags, { Layer = "platform-org" })
+  retention_in_days = 365
+  #checkov:skip=CKV_AWS_158:No KMS key is provisioned in this stack; log group contains no sensitive data (only activation status messages).
+  tags = merge(local.common_tags, { Layer = "platform-org" })
 }
 
 # ---------------------------------------------------------------------------
@@ -106,6 +111,15 @@ resource "aws_lambda_function" "activate_cost_tags" {
   handler          = "bootstrap"
   runtime          = "provided.al2023"
   timeout          = 30
+
+  # One concurrent execution is sufficient: the schedule fires once and
+  # EventBridge Scheduler retries on non-nil error; throttling is not a concern.
+  reserved_concurrent_executions = 1
+
+  #checkov:skip=CKV_AWS_117:This Lambda calls public AWS APIs (CE, SNS) and does not require VPC placement; placing it in a VPC would require a NAT gateway with no security benefit.
+  #checkov:skip=CKV_AWS_173:Environment variable contains only the SNS topic ARN (non-sensitive); no KMS key is provisioned in this stack.
+  #checkov:skip=CKV_AWS_116:EventBridge Scheduler handles retries when the Lambda returns a non-nil error; a separate DLQ would be redundant.
+  #checkov:skip=CKV_AWS_272:Internal first-party Lambda deployed from the same repository; code signing adds CI/CD complexity without meaningful security benefit for this use case.
 
   tracing_config {
     mode = "Active"
