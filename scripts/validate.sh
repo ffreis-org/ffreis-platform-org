@@ -75,8 +75,8 @@ else
     fail "FeatureSet=${feature_set} (expected ALL)"
   fi
 
-  scp_enabled="$(${AWS[@]} organizations list-roots | jq -r '
-    .Roots[0].PolicyTypes[]? | select(.Type == "SERVICE_CONTROL_POLICY") | .Status')"
+  scp_enabled="$(${AWS[@]} organizations list-roots 2>/dev/null | jq -r '
+    .Roots[0].PolicyTypes[]? | select(.Type == "SERVICE_CONTROL_POLICY") | .Status' || true)"
   if [[ "${scp_enabled}" == "ENABLED" ]]; then
     pass "SERVICE_CONTROL_POLICY type is ENABLED on root"
   else
@@ -133,10 +133,12 @@ expected_scps=(
 # Resolve environments OU ID
 env_ou_id=""
 if [[ -n "${org_id:-}" ]]; then
-  root_id="$(${AWS[@]} organizations list-roots | jq -r '.Roots[0].Id')"
-  env_ou_id="$(${AWS[@]} organizations list-organizational-units-for-parent \
-    --parent-id "${root_id}" | \
-    jq -r '.OrganizationalUnits[] | select(.Name == "environments") | .Id')"
+  root_id="$(${AWS[@]} organizations list-roots 2>/dev/null | jq -r '.Roots[0].Id' || true)"
+  if [[ -n "${root_id}" ]]; then
+    env_ou_id="$(${AWS[@]} organizations list-organizational-units-for-parent \
+      --parent-id "${root_id}" 2>/dev/null | \
+      jq -r '.OrganizationalUnits[] | select(.Name == "environments") | .Id' || true)"
+  fi
 fi
 
 if [[ -z "${env_ou_id}" ]]; then
@@ -146,7 +148,7 @@ else
 
   attached_scps="$(${AWS[@]} organizations list-policies-for-target \
     --target-id "${env_ou_id}" \
-    --filter SERVICE_CONTROL_POLICY | jq -r '.Policies[].Name')"
+    --filter SERVICE_CONTROL_POLICY 2>/dev/null | jq -r '.Policies[].Name' || true)"
 
   for scp_name in "${expected_scps[@]}"; do
     if echo "${attached_scps}" | grep -qx "${scp_name}"; then
