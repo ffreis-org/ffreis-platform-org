@@ -22,7 +22,7 @@ jobs:
       actions: read
       security-events: write
       id-token: write
-    uses: FelipeFuhr/ffreis-workflows-general/.github/workflows/general-scorecard.yml@c3e3e0a44d4b79697f1babaa9bf287d1b264da52
+    uses: FelipeFuhr/ffreis-workflows-general/.github/workflows/general-scorecard.yml@a02d736d25fa99fca8b4b623af9467d7afc472a4
     with:
       upload-sarif: true
 
