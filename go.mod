@@ -17,7 +17,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/eventbridge v1.45.25
 	github.com/aws/aws-sdk-go-v2/service/lambda v1.88.5
 	github.com/aws/aws-sdk-go-v2/service/lightsail v1.52.0
-	github.com/aws/aws-sdk-go-v2/service/organizations v1.51.1
+	github.com/aws/aws-sdk-go-v2/service/organizations v1.51.3
 	github.com/aws/aws-sdk-go-v2/service/resourcegroups v1.33.24
 	github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi v1.31.10
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.98.0
