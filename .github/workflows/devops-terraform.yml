@@ -22,12 +22,12 @@ concurrency:
 
 jobs:
   fmt:
-    uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-fmt.yml@e0cd54322d52fe7c522dd0bc2c46d56df2ceae43
+    uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-fmt.yml@105d9d036a68d89d47b6efe97d760849b99ec80b
     with:
       working-directory: "terraform"
 
   validate:
-    uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-validate.yml@e0cd54322d52fe7c522dd0bc2c46d56df2ceae43
+    uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-validate.yml@105d9d036a68d89d47b6efe97d760849b99ec80b
     needs: [fmt]
     with:
       chdir: "terraform/stack"
@@ -35,20 +35,20 @@ jobs:
       modules-dir: "terraform/modules"
 
   lint:
-    uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-lint.yml@e0cd54322d52fe7c522dd0bc2c46d56df2ceae43
+    uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-lint.yml@105d9d036a68d89d47b6efe97d760849b99ec80b
     needs: [fmt]
     with:
       lint-path: "terraform"
       tflint-config: ".tflint.hcl"
 
   trivy-config:
-    uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-security.yml@e0cd54322d52fe7c522dd0bc2c46d56df2ceae43
+    uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-security.yml@105d9d036a68d89d47b6efe97d760849b99ec80b
     needs: [fmt]
     with:
       scan-ref: "terraform"
 
   tfsec:
-    uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-tfsec.yml@e0cd54322d52fe7c522dd0bc2c46d56df2ceae43
+    uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-tfsec.yml@105d9d036a68d89d47b6efe97d760849b99ec80b
     needs: [fmt]
     with:
       scan-path: "terraform"
@@ -56,7 +56,7 @@ jobs:
       soft-fail: false
 
   checkov:
-    uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-checkov.yml@e0cd54322d52fe7c522dd0bc2c46d56df2ceae43
+    uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-checkov.yml@105d9d036a68d89d47b6efe97d760849b99ec80b
     needs: [fmt]
     with:
       scan-directory: "terraform"
@@ -64,7 +64,7 @@ jobs:
       soft-fail: false
 
   semgrep:
-    uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-semgrep.yml@e0cd54322d52fe7c522dd0bc2c46d56df2ceae43
+    uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-semgrep.yml@105d9d036a68d89d47b6efe97d760849b99ec80b
     needs: [fmt]
     with:
       working-directory: "terraform"
