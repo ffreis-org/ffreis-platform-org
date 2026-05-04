@@ -66,8 +66,8 @@ github.com/aws/aws-sdk-go-v2/service/sagemaker v1.238.0 h1:5jLvLVu20tlFgVOsX+ns4
 github.com/aws/aws-sdk-go-v2/service/sagemaker v1.238.0/go.mod h1:zsRrjJIfG9a9b3VRU+uPa3dX5fqgI+zKMXD4tbIlbdA=
 github.com/aws/aws-sdk-go-v2/service/scheduler v1.17.22 h1:W6iJpVVBijigufAXBm8f9xoG8YvpKZv+rQaUC0bT4Tc=
 github.com/aws/aws-sdk-go-v2/service/scheduler v1.17.22/go.mod h1:bIL40EgncO7wiyLB3Od2CkxEbU/REwG16lncm7jGqNA=
-github.com/aws/aws-sdk-go-v2/service/servicediscovery v1.39.26 h1:iHwbjffXjdzQmk7p5GiCcG2q8b7I2w+u2rlw5G0PYiA=
-github.com/aws/aws-sdk-go-v2/service/servicediscovery v1.39.26/go.mod h1:apQfhRlqr3+YEuvgR7QTKpkm3u0SJNOGMdSCoSl94+g=
+github.com/aws/aws-sdk-go-v2/service/servicediscovery v1.39.28 h1:wd35f7+1mwPV22PENB9ZnWjdvYcDrfytyVspMo02JYQ=
+github.com/aws/aws-sdk-go-v2/service/servicediscovery v1.39.28/go.mod h1:1lUDU6qw3e5FKsegwe+hZZJJXUjg8/L/szYUgVih8yM=
 github.com/aws/aws-sdk-go-v2/service/signin v1.0.9 h1:QKZH0S178gCmFEgst8hN0mCX1KxLgHBKKY/CLqwP8lg=
 github.com/aws/aws-sdk-go-v2/service/signin v1.0.9/go.mod h1:7yuQJoT+OoH8aqIxw9vwF+8KpvLZ8AWmvmUWHsGQZvI=
 github.com/aws/aws-sdk-go-v2/service/sns v1.39.15 h1:rOWMUrXJPcTXnk75ja6Bxv1P+j83dPhIWjfJ2cujj34=

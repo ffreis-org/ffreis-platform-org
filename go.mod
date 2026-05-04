@@ -23,7 +23,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.100.1
 	github.com/aws/aws-sdk-go-v2/service/sagemaker v1.238.0
 	github.com/aws/aws-sdk-go-v2/service/scheduler v1.17.22
-	github.com/aws/aws-sdk-go-v2/service/servicediscovery v1.39.26
+	github.com/aws/aws-sdk-go-v2/service/servicediscovery v1.39.28
 	github.com/aws/aws-sdk-go-v2/service/sns v1.39.15
 	github.com/aws/aws-sdk-go-v2/service/sts v1.41.10
 	github.com/mattn/go-isatty v0.0.20
