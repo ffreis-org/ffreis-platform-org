@@ -56,8 +56,8 @@ github.com/aws/aws-sdk-go-v2/service/lightsail v1.52.0 h1:vVhjSvQIx++9wlVnMX2ZIw
 github.com/aws/aws-sdk-go-v2/service/lightsail v1.52.0/go.mod h1:4nljpzVOSvMWeN9E7gMMa9aGWZVY0IVkhJ2DygRkV8c=
 github.com/aws/aws-sdk-go-v2/service/organizations v1.51.3 h1:LWSmXWwYzR9yRcszxyqaKuPCO4E6g/iknZv1kQIkD7I=
 github.com/aws/aws-sdk-go-v2/service/organizations v1.51.3/go.mod h1:DGpC4BVQ1zS8X/nFYfHGiHyAhrsb8gZ8pPxn+Jf0iPY=
-github.com/aws/aws-sdk-go-v2/service/resourcegroups v1.33.24 h1:Ar/RJ1jEbQ/71cwdkVyP5P792kjz5K5JiMGSgb1MB6s=
-github.com/aws/aws-sdk-go-v2/service/resourcegroups v1.33.24/go.mod h1:r9hb5MucKafDUeeB7fm/RqxnSLGW18GiEzoz9O18T6o=
+github.com/aws/aws-sdk-go-v2/service/resourcegroups v1.33.26 h1:HmcCtAaTeZTskXrcrdoioe6oDsQCbdGekBkLOCUE8F8=
+github.com/aws/aws-sdk-go-v2/service/resourcegroups v1.33.26/go.mod h1:nYctzUkOuHA0n6thF68Td93Mm8NJzAhWuhKOIqk5vW8=
 github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi v1.31.10 h1:/06ZTEMv78pKQyHCE8mCyTr0jqyB/SgEqNISV0cLpho=
 github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi v1.31.10/go.mod h1:1U2gliqlvTuDukaKtoF9IvEC+rP2pb0b6c4f7s/INeQ=
 github.com/aws/aws-sdk-go-v2/service/s3 v1.100.1 h1:mxuT1xE+dI54NW3RkNjP8DUT5HXqbkiAFvfdyDFwE5c=
