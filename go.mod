@@ -10,7 +10,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue v1.20.39
 	github.com/aws/aws-sdk-go-v2/service/budgets v1.43.4
 	github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.72.0
-	github.com/aws/aws-sdk-go-v2/service/costexplorer v1.63.6
+	github.com/aws/aws-sdk-go-v2/service/costexplorer v1.63.8
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.57.3
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.299.1
 	github.com/aws/aws-sdk-go-v2/service/ecs v1.79.1
@@ -18,16 +18,16 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/lambda v1.88.5
 	github.com/aws/aws-sdk-go-v2/service/lightsail v1.52.0
 	github.com/aws/aws-sdk-go-v2/service/organizations v1.51.3
-	github.com/aws/aws-sdk-go-v2/service/resourcegroups v1.33.24
-	github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi v1.31.10
+	github.com/aws/aws-sdk-go-v2/service/resourcegroups v1.33.26
+	github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi v1.31.12
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.100.1
 	github.com/aws/aws-sdk-go-v2/service/sagemaker v1.238.0
 	github.com/aws/aws-sdk-go-v2/service/scheduler v1.17.22
-	github.com/aws/aws-sdk-go-v2/service/servicediscovery v1.39.26
+	github.com/aws/aws-sdk-go-v2/service/servicediscovery v1.39.28
 	github.com/aws/aws-sdk-go-v2/service/sns v1.39.15
 	github.com/aws/aws-sdk-go-v2/service/sts v1.41.10
 	github.com/mattn/go-isatty v0.0.20
-	github.com/spf13/cobra v1.8.1
+	github.com/spf13/cobra v1.10.2
 )
 
 require (
@@ -65,5 +65,5 @@ require (
 	github.com/aws/smithy-go v1.25.1
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/spf13/pflag v1.0.5 // indirect
+	github.com/spf13/pflag v1.0.9 // indirect
 )
