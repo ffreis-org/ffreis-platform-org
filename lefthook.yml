@@ -8,6 +8,7 @@ remotes:
 # terraform hooks use repo-specific scripts (tflint wrapper + validate helper)
 # local lint overrides go.yml's make lint for terraform context
 pre-commit:
+  parallel: true
   commands:
     lint:
       glob: "**/*.tf"
