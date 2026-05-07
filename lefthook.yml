@@ -25,3 +25,4 @@ pre-push:
       run: ./scripts/hooks/run_tflint_if_available.sh
     validate:
       run: make validate
+      skip: true  # requires AWS credentials not available in all local environments
