@@ -4,12 +4,14 @@ remotes:
     configs:
       - lefthook/base.yml
       - lefthook/go.yml
+      - lefthook/terraform.yml
 
-# terraform hooks use repo-specific scripts (tflint wrapper + validate helper)
-# local lint overrides go.yml's make lint for terraform context
+# Override terraform.yml's lint with a graceful wrapper that skips when tflint is absent,
+# and add a validate step for Terraform state pre-commit.
 pre-commit:
   parallel: true
   commands:
+    # Override platform-standards terraform lint — gracefully skips if tflint not installed
     lint:
       glob: "**/*.tf"
       run: ./scripts/hooks/run_tflint_if_available.sh
