@@ -9,4 +9,4 @@ if ! command -v tflint >/dev/null 2>&1; then
 fi
 
 tflint --init
-tflint --recursive --format compact terraform
+tflint --chdir=terraform --recursive --format compact
