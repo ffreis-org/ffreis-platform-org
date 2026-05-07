@@ -1,0 +1,25 @@
+name: Terraform Docs
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "terraform/stack/**/*.tf"
+      - ".github/workflows/tf-docs.yml"
+  merge_group:
+    types: [checks_requested]
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  docs:
+    uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-docs.yml@e0cd54322d52fe7c522dd0bc2c46d56df2ceae43
+    with:
+      working-directory: "terraform/stack"
