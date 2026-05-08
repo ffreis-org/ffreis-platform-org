@@ -24,6 +24,7 @@ permissions:
 
 jobs:
   mod-tidy:
+    timeout-minutes: 15
     permissions:
       contents: read
     uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-mod-tidy-check.yml@706807616c7887b62bf1f5c72050db843add3828
@@ -32,6 +33,7 @@ jobs:
       working-directory: "."
 
   fmt:
+    timeout-minutes: 15
     permissions:
       contents: read
     uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-fmt.yml@706807616c7887b62bf1f5c72050db843add3828
@@ -40,6 +42,7 @@ jobs:
       working-directory: "."
 
   lint:
+    timeout-minutes: 15
     needs: [fmt]
     runs-on: ubuntu-latest
     permissions:
@@ -71,6 +74,8 @@ jobs:
           args: --path-prefix=. --timeout=5m
 
   test:
+    timeout-minutes: 30
+    if: ${{ !github.event.pull_request.draft }}
     needs: [fmt]
     permissions:
       contents: read

@@ -15,6 +15,7 @@ concurrency:
 
 jobs:
   lefthook:
+    timeout-minutes: 15
     uses: FelipeFuhr/ffreis-workflows-general/.github/workflows/general-lefthook.yml@01e2b12e992621fecf074b8a202f66044196f3bf # v1.0.4
     with:
       working-directory: "."

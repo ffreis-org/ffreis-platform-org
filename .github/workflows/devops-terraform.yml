@@ -22,11 +22,13 @@ concurrency:
 
 jobs:
   fmt:
+    timeout-minutes: 15
     uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-fmt.yml@105d9d036a68d89d47b6efe97d760849b99ec80b
     with:
       working-directory: "terraform"
 
   validate:
+    timeout-minutes: 15
     uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-validate.yml@105d9d036a68d89d47b6efe97d760849b99ec80b
     needs: [fmt]
     with:
@@ -35,6 +37,7 @@ jobs:
       modules-dir: "terraform/modules"
 
   lint:
+    timeout-minutes: 15
     uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-lint.yml@105d9d036a68d89d47b6efe97d760849b99ec80b
     needs: [fmt]
     with:
@@ -42,12 +45,14 @@ jobs:
       tflint-config: ".tflint.hcl"
 
   trivy-config:
+    timeout-minutes: 30
     uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-security.yml@105d9d036a68d89d47b6efe97d760849b99ec80b
     needs: [fmt]
     with:
       scan-ref: "terraform"
 
   tfsec:
+    timeout-minutes: 15
     uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-tfsec.yml@105d9d036a68d89d47b6efe97d760849b99ec80b
     needs: [fmt]
     with:
@@ -56,6 +61,7 @@ jobs:
       soft-fail: false
 
   checkov:
+    timeout-minutes: 15
     uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-checkov.yml@105d9d036a68d89d47b6efe97d760849b99ec80b
     needs: [fmt]
     with:
@@ -64,6 +70,7 @@ jobs:
       soft-fail: false
 
   semgrep:
+    timeout-minutes: 30
     uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-semgrep.yml@105d9d036a68d89d47b6efe97d760849b99ec80b
     needs: [fmt]
     with:

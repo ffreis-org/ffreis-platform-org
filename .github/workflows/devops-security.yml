@@ -16,6 +16,7 @@ permissions:
 
 jobs:
   gitleaks:
+    timeout-minutes: 30
     permissions:
       contents: read
       actions: read
@@ -27,6 +28,7 @@ jobs:
       upload-sarif: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}
 
   codeql:
+    timeout-minutes: 30
     permissions:
       actions: read
       contents: read
@@ -37,6 +39,7 @@ jobs:
       source-root: "."
 
   govulncheck:
+    timeout-minutes: 30
     permissions:
       contents: read
     uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-security.yml@706807616c7887b62bf1f5c72050db843add3828
@@ -45,6 +48,7 @@ jobs:
       working-directory: "."
 
   semgrep:
+    timeout-minutes: 30
     permissions:
       contents: read
       security-events: write
@@ -54,6 +58,7 @@ jobs:
       upload-sarif: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}
 
   trivy-fs:
+    timeout-minutes: 30
     permissions:
       contents: read
       security-events: write
@@ -63,6 +68,7 @@ jobs:
       upload-sarif: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}
 
   grype-fs:
+    timeout-minutes: 30
     permissions:
       contents: read
       security-events: write
@@ -72,6 +78,7 @@ jobs:
       upload-sarif: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}
 
   osv:
+    timeout-minutes: 30
     permissions:
       contents: read
       actions: read
@@ -82,6 +89,7 @@ jobs:
       upload-sarif: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}
 
   snyk:
+    timeout-minutes: 30
     if: vars.SNYK_ENABLED == 'true'
     permissions:
       contents: read
