@@ -17,7 +17,6 @@ permissions:
 
 jobs:
   plan-prod:
-    timeout-minutes: 15
     uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-plan.yml@105d9d036a68d89d47b6efe97d760849b99ec80b
     with:
       environment: "prod"
