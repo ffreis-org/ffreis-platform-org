@@ -15,9 +15,6 @@ on:
       - "go.sum"
       - ".github/workflows/ci.yml"
 
-permissions:
-  contents: read
-
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -25,6 +22,8 @@ concurrency:
 jobs:
   test:
     name: Go Test
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     steps:
       - name: Harden the runner (Audit all outbound calls)
@@ -46,6 +45,8 @@ jobs:
 
   vet:
     name: Go Vet
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     needs: [test]
     steps:
