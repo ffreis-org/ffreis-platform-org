@@ -12,9 +12,6 @@ on:
   push:
     branches: [main]
 
-permissions:
-  contents: read
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -22,6 +19,8 @@ concurrency:
 jobs:
   sonar:
     name: SonarCloud
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     if: vars.SONAR_ENABLED != 'false' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false)
 

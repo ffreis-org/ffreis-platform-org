@@ -13,20 +13,21 @@ on:
       - ".tflint.hcl"
       - ".github/workflows/**"
 
-permissions:
-  contents: read
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   fmt:
+    permissions:
+      contents: read
     uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-fmt.yml@105d9d036a68d89d47b6efe97d760849b99ec80b
     with:
       working-directory: "terraform"
 
   validate:
+    permissions:
+      contents: read
     uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-validate.yml@105d9d036a68d89d47b6efe97d760849b99ec80b
     needs: [fmt]
     with:
@@ -35,6 +36,8 @@ jobs:
       modules-dir: "terraform/modules"
 
   lint:
+    permissions:
+      contents: read
     uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-lint.yml@105d9d036a68d89d47b6efe97d760849b99ec80b
     needs: [fmt]
     with:
@@ -42,12 +45,20 @@ jobs:
       tflint-config: ".tflint.hcl"
 
   trivy-config:
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
     uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-security.yml@105d9d036a68d89d47b6efe97d760849b99ec80b
     needs: [fmt]
     with:
       scan-ref: "terraform"
 
   tfsec:
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
     uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-tfsec.yml@105d9d036a68d89d47b6efe97d760849b99ec80b
     needs: [fmt]
     with:
@@ -56,6 +67,10 @@ jobs:
       soft-fail: false
 
   checkov:
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
     uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-checkov.yml@105d9d036a68d89d47b6efe97d760849b99ec80b
     needs: [fmt]
     with:
@@ -64,6 +79,10 @@ jobs:
       soft-fail: false
 
   semgrep:
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
     uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-semgrep.yml@105d9d036a68d89d47b6efe97d760849b99ec80b
     needs: [fmt]
     with:
