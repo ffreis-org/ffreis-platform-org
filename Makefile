@@ -125,13 +125,13 @@ nuke: _require_fetched
 ## fmt: format all Go and Terraform files
 fmt:
 	./scripts/hooks/check_required_tools.sh terraform
-	$(GOFMT) -w .
+	$(GOFMT) -w $$(find . -type d \( -name .terraform -o -name vendor -o -path ./bin \) -prune -o -type f -name '*.go' -print)
 	terraform fmt -recursive .
 
 ## fmt-check: fail if any Go or Terraform file is not formatted
 fmt-check:
 	./scripts/hooks/check_required_tools.sh terraform
-	@unformatted=$$($(GOFMT) -l .); \
+	@unformatted=$$(find . -type d \( -name .terraform -o -name vendor -o -path ./bin \) -prune -o -type f -name '*.go' -print | xargs $(GOFMT) -l); \
 	if [ -n "$$unformatted" ]; then \
 	  printf "The following files need gofmt:\n%s\n\nFix with: gofmt -w .\n" "$$unformatted"; \
 	  exit 1; \
