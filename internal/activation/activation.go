@@ -14,8 +14,20 @@ import (
 
 // CostAllocationTags is the canonical list of tags to activate in AWS Cost Explorer.
 // Both the CLI and the Lambda import this — the single source of truth.
+//
+// Extended 2026-05-31 (Phase C3 of the AWS tagging audit) to include the
+// per-product CostCenter and the three new visibility tags from
+// ffreis-platform-terraform-modules/modules/tagging v2.0.0:
+//   - LifecycleState (production / development / experiment / legacy)
+//   - FixedCostTier  (none / low / medium / high)
+//   - Domain         (per-domain or per-subdomain enum)
+//
+// CostCenter is the most important addition — without activation, Cost
+// Explorer cannot group spend by the per-product values (flemming, petlook,
+// ffreis-website, …) the new tagging schema emits.
 var CostAllocationTags = []string{
 	"Stack", "Project", "Layer", "Owner", "Environment",
+	"CostCenter", "LifecycleState", "FixedCostTier", "Domain",
 }
 
 // ErrNotReady is returned when AWS CE hasn't discovered the tag keys yet.
