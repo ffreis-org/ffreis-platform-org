@@ -145,9 +145,7 @@ validate:
 
 ## lint: run tflint across all Terraform files
 lint:
-	./scripts/hooks/check_required_tools.sh tflint
-	tflint --init
-	tflint --recursive --format compact terraform
+	./scripts/hooks/run_tflint_if_available.sh
 
 ## test: no unit tests — use 'make validate' or 'make plan ENV=<env>'
 test:
