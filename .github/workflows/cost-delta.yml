@@ -1,0 +1,66 @@
+name: cost-delta
+
+on:
+  pull_request:
+    paths:
+      - "terraform/**/*.tf"
+      - "terraform/**/*.tfvars"
+      - ".github/workflows/cost-delta.yml"
+      - ".github/scripts/cost-delta.py"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  cost-delta:
+    name: Fixed-cost delta (in-house static analysis)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: ${{ !github.event.pull_request.draft }}
+    permissions:
+      pull-requests: write
+      contents: read
+    steps:
+      - name: Checkout (full depth, need base ref)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Compute fixed-cost delta
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -euo pipefail
+          git fetch origin "$BASE_REF" --quiet
+          git diff "origin/$BASE_REF...HEAD" -- '*.tf' \
+            | python3 .github/scripts/cost-delta.py \
+                --repo-root . --base-ref "origin/$BASE_REF" \
+            > /tmp/cost-delta.md
+          echo "--- comment body ---"
+          cat /tmp/cost-delta.md
+
+      - name: Upsert PR comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          existing=$(gh api --paginate "/repos/${REPO}/issues/${PR_NUMBER}/comments" \
+            --jq '.[] | select(.body | startswith("<!-- cost-delta-bot -->")) | .id' \
+            | head -1)
+          body=$(cat /tmp/cost-delta.md)
+          if [[ -n "$existing" ]]; then
+            gh api --method PATCH "/repos/${REPO}/issues/comments/${existing}" \
+              -f body="$body" >/dev/null
+            echo "Updated comment ${existing}"
+          else
+            gh pr comment "$PR_NUMBER" --body "$body"
+            echo "Created new comment"
+          fi
