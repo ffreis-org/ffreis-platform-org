@@ -38,9 +38,14 @@ Lambdas. `go.mod` requires it at a pinned GitHub pseudo-version, and its transit
 `github.com/FelipeFuhr/ffreis-platform-cli` pseudo-version (the same pattern
 `ffreis-flemming-infra` uses). Fetching needs `GOPRIVATE=github.com/FelipeFuhr/*`.
 
-Deliberately NOT done yet (follow-ups): `audit`/`doctor` still render via the
-human presenter only (no `--json`); the older duplicated audit/inventory/tfexec
-logic in `package cmd` has not yet been refactored onto `platform-cli`.
+`audit` and `doctor` both support `--json` (machine-readable contract; see
+`cmd/audit_json.go` for the audit projection). Deliberately NOT done: the older
+duplicated audit/inventory/tfexec logic in `package cmd` is NOT refactored onto
+`platform-cli` — it can't be a mechanical dedup. platform-org's `parseARN` and
+bootstrap/UNOWNED/terraform classification differ from platform-cli's
+special-cased `ResourceTypeFromARN` + OWNED/OTHER_MANAGED model, and the audit
+internals are deeply mocked across the test suite, so adopting the shared engine
+is a redesign (it changes audit's output), not a quick swap.
 
 ## Build / test
 
