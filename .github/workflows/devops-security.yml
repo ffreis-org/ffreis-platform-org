@@ -34,17 +34,24 @@ jobs:
               - '!**/*.md'
               - '!docs/**'
 
-  gitleaks:
+  security-fs:
+    needs: changes
+    if: |
+      always() && (
+        needs.changes.result == 'skipped' ||
+        needs.changes.outputs.code == 'true'
+      )
     permissions:
       contents: read
       actions: read
       security-events: write
-    uses: FelipeFuhr/ffreis-workflows-general/.github/workflows/general-gitleaks.yml@01e2b12e992621fecf074b8a202f66044196f3bf # v1.0.4
+    # Consolidated fs-security bundle: Trivy(fs) + Grype(fs) + gitleaks in ONE job
+    # (was 3 separate jobs). upload-sarif off: GHAS/code-scanning not enabled.
+    uses: FelipeFuhr/ffreis-workflows-general/.github/workflows/general-security-fs.yml@503674eb96658628d0938c23a44d226803021705 # v1.3.0
     with:
       working-directory: "."
       scan-history: true
-      upload-sarif: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}
-
+      upload-sarif: false
   codeql:
     permissions:
       actions: read
@@ -70,37 +77,7 @@ jobs:
     uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-semgrep-sarif.yml@706807616c7887b62bf1f5c72050db843add3828
     with:
       working-directory: "."
-      upload-sarif: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}
-
-  trivy-fs:
-    needs: changes
-    if: |
-      always() && (
-        needs.changes.result == 'skipped' ||
-        needs.changes.outputs.code == 'true'
-      )
-    permissions:
-      contents: read
-      security-events: write
-    uses: FelipeFuhr/ffreis-workflows-general/.github/workflows/general-scan-trivy-fs.yml@01e2b12e992621fecf074b8a202f66044196f3bf # v1.0.4
-    with:
-      scan-ref: "."
-      upload-sarif: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}
-
-  grype-fs:
-    needs: changes
-    if: |
-      always() && (
-        needs.changes.result == 'skipped' ||
-        needs.changes.outputs.code == 'true'
-      )
-    permissions:
-      contents: read
-      security-events: write
-    uses: FelipeFuhr/ffreis-workflows-general/.github/workflows/general-scan-grype-fs.yml@01e2b12e992621fecf074b8a202f66044196f3bf # v1.0.4
-    with:
-      path: "."
-      upload-sarif: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}
+      upload-sarif: false
 
   osv:
     needs: changes
