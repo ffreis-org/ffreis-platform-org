@@ -91,7 +91,13 @@ var rootCmd = &cobra.Command{
 	SilenceErrors: true,
 	SilenceUsage:  true,
 	PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+		// cobra's Command.Context() returns nil (not Background) when the command
+		// was never run through Execute — e.g. tests calling PersistentPreRunE
+		// directly. Guard so WithPresenter never gets a nil parent context.
 		ctx := cmd.Context()
+		if ctx == nil {
+			ctx = context.Background()
+		}
 
 		presenter, err := platformui.New(d.uiMode)
 		if err != nil {
