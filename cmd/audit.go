@@ -158,6 +158,16 @@ Sections:
 			return fmt.Errorf("running integrity checks: %w", err)
 		}
 
+		if jsonOut, _ := cmd.Flags().GetBool("json"); jsonOut {
+			if encErr := writeJSON(cmd.OutOrStdout(), newAuditReportJSON(sections, doctorReport)); encErr != nil {
+				return encErr
+			}
+			if doctorReport.HasFailures() {
+				return fmt.Errorf("integrity checks failed with %d blocking issue(s)", doctorReport.Summary.Fail)
+			}
+			return nil
+		}
+
 		printAuditSections(out, sections)
 		out.Blank()
 		out.Header("Integrity Checks", "")
@@ -1368,5 +1378,6 @@ func truncate(s string, max int) string {
 }
 
 func init() {
+	auditCmd.Flags().Bool("json", false, "output the audit report as JSON")
 	rootCmd.AddCommand(auditCmd)
 }

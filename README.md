@@ -76,6 +76,32 @@ Or use the CLI directly:
 ./bin/platform-org audit --region us-east-1 --profile bootstrap
 ```
 
+## Read-only insight commands
+
+Beyond the Terraform lifecycle, `platform-org` exposes read-only views of the
+fleet keyed by **responsibility** (the cost-allocation tags from
+`modules/tagging`). Each supports `--json` for a stable machine-readable
+contract — the same shape dashboard Lambdas consume.
+
+```sh
+# Spend by CostCenter / Project / Domain + budgets + active cost tags
+./bin/platform-org cost --days 7 --profile bootstrap
+./bin/platform-org cost --json | jq '.total_usd, .by_tag.CostCenter'
+
+# AWS Organizations structure: accounts, OUs, SCPs
+./bin/platform-org accounts --json | jq '.accounts | length'
+
+# Tagged resources grouped by responsibility (region-scoped)
+./bin/platform-org resources --group-by CostCenter --json | jq '.summary'
+./bin/platform-org resources --cost-center petlook
+```
+
+These commands are backed by the shared
+[`ffreis-platform-inventory`](https://github.com/FelipeFuhr/ffreis-platform-inventory)
+library (`pkg/cost`, `pkg/org`, `pkg/resources`) so the CLI and dashboards read
+the fleet through one engine. Cost Explorer charges ~$0.01 per call and is
+us-east-1 only; the `cost` command pins its clients there automatically.
+
 ## Safety notes
 
 - `terraform/stack/backend.local.hcl` contains real backend identifiers and is gitignored
