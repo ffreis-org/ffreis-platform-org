@@ -28,12 +28,22 @@ variable "budget_alert_email" {
 }
 
 variable "budget_alert_threshold_usd" {
-  description = "Monthly spend limit in USD. Alerts fire at 80% and 100% actual, and 100% forecasted."
+  description = "Tier-1 org-wide monthly spend limit in USD (early tripwire, ~2.5x normal fleet spend). Alerts fire at 80% and 100% actual, and 100% forecasted."
   type        = number
-  default     = 20
+  default     = 30
   validation {
     condition     = var.budget_alert_threshold_usd > 0
     error_message = "Budget threshold must be greater than 0."
+  }
+}
+
+variable "budget_ceiling_threshold_usd" {
+  description = "Tier-2 org-wide monthly spend ceiling in USD (higher hard ceiling for a genuine runaway). Must be >= the tier-1 threshold."
+  type        = number
+  default     = 60
+  validation {
+    condition     = var.budget_ceiling_threshold_usd >= var.budget_alert_threshold_usd
+    error_message = "Ceiling must be greater than or equal to budget_alert_threshold_usd."
   }
 }
 
