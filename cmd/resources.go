@@ -7,6 +7,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi"
 	"github.com/spf13/cobra"
 
+	"github.com/ffreis/platform-cli/pkg/audit"
+	"github.com/ffreis/platform-cli/pkg/inventory"
+
 	"github.com/FelipeFuhr/ffreis-platform-inventory/pkg/resources"
 	"github.com/FelipeFuhr/ffreis-platform-inventory/pkg/responsibility"
 )
@@ -19,6 +22,7 @@ var (
 	resourcesDomain      string
 	resourcesProject     string
 	resourcesEnvironment string
+	resourcesUntagged    bool
 )
 
 var resourcesCmd = &cobra.Command{
@@ -39,6 +43,10 @@ Note: the AWS tagging API is regional — this lists resources in --region only.
 		// expects (ports-and-adapters — the library owns no AWS client).
 		fetch := func(c context.Context, in *resourcegroupstaggingapi.GetResourcesInput) (*resourcegroupstaggingapi.GetResourcesOutput, error) {
 			return d.tagging.GetResources(c, in)
+		}
+
+		if resourcesUntagged {
+			return runTagCoverage(cmd, ctx, fetch)
 		}
 
 		view, err := resources.Build(ctx, fetch, resources.Options{
@@ -96,5 +104,46 @@ func init() {
 	f.StringVar(&resourcesDomain, "domain", "", "Filter to this Domain")
 	f.StringVar(&resourcesProject, "project", "", "Filter to this Project")
 	f.StringVar(&resourcesEnvironment, "environment", "", "Filter to this Environment")
+	f.BoolVar(&resourcesUntagged, "untagged", false,
+		"Coverage mode: list resources missing required cost-allocation tags ("+
+			fmt.Sprintf("%v", costAllocationTagKeys)+") and exit non-zero if any are found")
 	rootCmd.AddCommand(resourcesCmd)
+}
+
+// runTagCoverage scans every taggable resource in the region and reports those
+// missing a required cost-allocation tag. It exits non-zero when gaps exist so
+// it can gate CI or a scheduled drift check — the "catch untagged resources"
+// overseeing capability.
+func runTagCoverage(cmd *cobra.Command, ctx context.Context, fetch audit.PageFetcher) error {
+	scanned, err := audit.ScanResources(ctx, fetch, inventory.Contract{}, d.env)
+	if err != nil {
+		return err
+	}
+	view := computeTagCoverage(scanned, costAllocationTagKeys)
+
+	if resourcesJSON {
+		if err := writeJSON(cmd.OutOrStdout(), view); err != nil {
+			return err
+		}
+	} else {
+		out := newCommandOutput(cmd, d.ui)
+		out.Header("Tag Coverage — resources missing required cost-allocation tags",
+			envAccountRegionSummary(d.env, d.accountID, d.region))
+		out.Summary("Scope",
+			"required="+fmt.Sprintf("%v", view.Required),
+			fmt.Sprintf("total=%d", view.Summary.Total),
+			fmt.Sprintf("covered=%d", view.Summary.Covered),
+			fmt.Sprintf("uncovered=%d", view.Summary.Uncovered),
+			fmt.Sprintf("skipped=%d", view.Summary.Skipped),
+		)
+		for _, g := range view.Gaps {
+			out.Line(fmt.Sprintf("  %-26s %-40s missing: %v", g.ResourceType, g.Name, g.Missing))
+		}
+	}
+
+	if view.Summary.Uncovered > 0 {
+		return fmt.Errorf("%d resource(s) missing required cost-allocation tags in %s (%s)",
+			view.Summary.Uncovered, d.env, d.region)
+	}
+	return nil
 }

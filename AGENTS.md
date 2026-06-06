@@ -11,6 +11,15 @@ Terraform lifecycle: `plan`, `apply`, `nuke`, `purge`, `activate`, `tempuser`.
 Diagnostics: `audit`, `doctor`. Read-only insight (added 2026-05-31): `cost`,
 `accounts` (alias `org`), `resources` (alias `inventory`) — all support `--json`.
 
+`resources --untagged` (added 2026-06-06) is tag-coverage mode: it lists every
+resource in `--region` missing a required cost-allocation tag (`CostCenter`,
+`Project`, `Environment`, `ManagedBy`, `Stack`) and **exits non-zero** if any are
+found — the overseeing gate that catches untagged resources (so per-product
+budgets stay attributable). `CostCenter` is required here even though
+platform-cli's `CoreTagKeys` omits it. Inherently-untaggable ARNs (billing
+`payment-instrument`s) are skipped via `untaggableARNFragments` in
+`cmd/coverage.go` — extend that list for other non-taggable types.
+
 ## Non-obvious constraints
 
 - **AWS auth.** `--profile` or `AWS_ACCESS_KEY_ID`/`SECRET` env (no IMDS
