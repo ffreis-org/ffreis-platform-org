@@ -27,6 +27,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/servicediscovery v1.39.28
 	github.com/aws/aws-sdk-go-v2/service/sns v1.39.15
 	github.com/aws/aws-sdk-go-v2/service/sts v1.42.1
+	github.com/ffreis/platform-cli v0.0.0-20260412022253-0a429e501afe
 	github.com/mattn/go-isatty v0.0.20
 	github.com/spf13/cobra v1.10.2
 )
@@ -44,7 +45,6 @@ require (
 	github.com/charmbracelet/x/ansi v0.8.0 // indirect
 	github.com/charmbracelet/x/cellbuf v0.0.13-0.20250311204145-2c3ea96c31dd // indirect
 	github.com/charmbracelet/x/term v0.2.1 // indirect
-	github.com/ffreis/platform-cli v0.0.0-20260412022253-0a429e501afe // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
