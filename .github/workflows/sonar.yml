@@ -31,7 +31,7 @@ jobs:
     if: ${{ !github.event.pull_request.draft && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false) }}
     permissions:
       contents: read
-    uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-sonar.yml@d707b489cae8f852d64a8c1bb6788a7a098ccac9 # main
+    uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-sonar.yml@1651792817a59920bb4de6626c1d5a307c2edb0f # v1.1.1
     with:
       go-version: "1.24"
       working-directory: "."
