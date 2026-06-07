@@ -75,7 +75,8 @@ jobs:
           org="$(printf '%s' "${org}" | tr '[:upper:]' '[:lower:]')"
 
           repo_name="${GITHUB_REPOSITORY#*/}"
-          project_key="${SONAR_PROJECT_KEY:-${file_project_key:-${GITHUB_REPOSITORY_OWNER}_${repo_name}}}"
+          owner_lower="$(printf '%s' "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
+          project_key="${SONAR_PROJECT_KEY:-${file_project_key:-${owner_lower}_${repo_name}}}"
           base_ref="${BASE_REF:-main}"
 
           {
