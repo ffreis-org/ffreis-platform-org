@@ -13,32 +13,38 @@ concurrency:
 
 jobs:
   scorecard:
-    if: vars.SCORECARD_ENABLED == 'true' && github.event_name != 'pull_request'
+    if: |
+      (vars.FLEET_SPOT_CI != 'true' || github.event_name == 'workflow_dispatch') &&
+      vars.SCORECARD_ENABLED == 'true' && github.event_name != 'pull_request'
     permissions:
       contents: read
       actions: read
       security-events: write
       id-token: write
-    uses: FelipeFuhr/ffreis-workflows-general/.github/workflows/general-scorecard.yml@caa797cc7baec52e99f21b86f532a4b7c88cf4fa # fix/grype-install-outside-scan-path
+    uses: FelipeFuhr/ffreis-workflows-general/.github/workflows/general-scorecard.yml@ce7169b36bd25b1c4c0c8077aa78ecde6d6ca7d5  # v1.6.0
     with:
       upload-sarif: true
 
+      runner: ${{ (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') && '["ubuntu-latest"]' || '["self-hosted","spot","linux","x64"]' }}
   stale:
-    if: vars.STALE_ENABLED == 'true' && github.event_name != 'pull_request'
+    if: |
+      (vars.FLEET_SPOT_CI != 'true' || github.event_name == 'workflow_dispatch') &&
+      vars.STALE_ENABLED == 'true' && github.event_name != 'pull_request'
     permissions:
       contents: read
       issues: write
       pull-requests: write
-    uses: FelipeFuhr/ffreis-workflows-general/.github/workflows/general-stale.yml@caa797cc7baec52e99f21b86f532a4b7c88cf4fa # fix/grype-install-outside-scan-path
+    uses: FelipeFuhr/ffreis-workflows-general/.github/workflows/general-stale.yml@ce7169b36bd25b1c4c0c8077aa78ecde6d6ca7d5  # v1.6.0
     with:
       only: "both"
 
+      runner: ${{ (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') && '["ubuntu-latest"]' || '["self-hosted","spot","linux","x64"]' }}
   release-please:
     if: vars.RELEASE_PLEASE_ENABLED == 'true' && github.event_name == 'push'
     permissions:
       contents: write
       pull-requests: write
-    uses: FelipeFuhr/ffreis-workflows-general/.github/workflows/general-release-please.yml@caa797cc7baec52e99f21b86f532a4b7c88cf4fa # fix/grype-install-outside-scan-path
+    uses: FelipeFuhr/ffreis-workflows-general/.github/workflows/general-release-please.yml@ce7169b36bd25b1c4c0c8077aa78ecde6d6ca7d5  # v1.6.0
     with:
       target-branch: "main"
     secrets:
