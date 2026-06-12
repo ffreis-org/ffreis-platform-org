@@ -15,13 +15,13 @@ jobs:
     if: github.event_name == 'pull_request'
     permissions:
       contents: read
-    uses: FelipeFuhr/ffreis-workflows-general/.github/workflows/general-semantic-pr.yml@caa797cc7baec52e99f21b86f532a4b7c88cf4fa # fix/grype-install-outside-scan-path
+    uses: FelipeFuhr/ffreis-workflows-general/.github/workflows/general-semantic-pr.yml@3858e9e74c805067e454740b195372c7195f333b # v1.5.0
 
   actionlint:
     if: github.event_name == 'pull_request'
     permissions:
       contents: read
-    uses: FelipeFuhr/ffreis-workflows-general/.github/workflows/general-actionlint.yml@caa797cc7baec52e99f21b86f532a4b7c88cf4fa # fix/grype-install-outside-scan-path
+    uses: FelipeFuhr/ffreis-workflows-general/.github/workflows/general-actionlint.yml@3858e9e74c805067e454740b195372c7195f333b # v1.5.0
     with:
       working-directory: "."
 
@@ -31,7 +31,7 @@ jobs:
       contents: read
       pull-requests: write
       issues: write
-    uses: FelipeFuhr/ffreis-workflows-general/.github/workflows/general-labeler.yml@caa797cc7baec52e99f21b86f532a4b7c88cf4fa # fix/grype-install-outside-scan-path
+    uses: FelipeFuhr/ffreis-workflows-general/.github/workflows/general-labeler.yml@3858e9e74c805067e454740b195372c7195f333b # v1.5.0
     with:
       rules-json: |-
         [
