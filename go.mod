@@ -1,6 +1,6 @@
 module github.com/ffreis/platform-org
 
-go 1.25.8
+go 1.25.11
 
 require (
 	github.com/FelipeFuhr/ffreis-platform-inventory v0.0.0-20260601020953-1f1529b57d83
