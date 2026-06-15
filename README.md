@@ -1,5 +1,9 @@
 # platform-org
 
+<!-- ffreis-badges:start -->
+[![CI](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/FelipeFuhr/ffreis-badges/main/badges/ffreis-platform-org/ci.json)](https://github.com/FelipeFuhr/ffreis-platform-org/actions) [![License](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/FelipeFuhr/ffreis-badges/main/badges/ffreis-platform-org/license.json)](https://github.com/FelipeFuhr/ffreis-platform-org/blob/main/LICENSE)
+<!-- ffreis-badges:end -->
+
 Terraform stack and companion CLI for managing the platform organization layer.
 
 This repo is the next layer after `platform-bootstrap`:
