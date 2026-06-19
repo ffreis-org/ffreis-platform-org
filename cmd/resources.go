@@ -7,8 +7,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi"
 	"github.com/spf13/cobra"
 
-	"github.com/ffreis/platform-cli/pkg/audit"
-	"github.com/ffreis/platform-cli/pkg/inventory"
+	"github.com/FelipeFuhr/ffreis-platform-cli/pkg/audit"
+	"github.com/FelipeFuhr/ffreis-platform-cli/pkg/inventory"
 
 	"github.com/FelipeFuhr/ffreis-platform-inventory/pkg/resources"
 	"github.com/FelipeFuhr/ffreis-platform-inventory/pkg/responsibility"

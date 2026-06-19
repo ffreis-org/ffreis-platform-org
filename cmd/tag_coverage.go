@@ -4,8 +4,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ffreis/platform-cli/pkg/audit"
-	"github.com/ffreis/platform-cli/pkg/inventory"
+	"github.com/FelipeFuhr/ffreis-platform-cli/pkg/audit"
+	"github.com/FelipeFuhr/ffreis-platform-cli/pkg/inventory"
 )
 
 // costAllocationTagKeys are the tags every billable resource must carry so its

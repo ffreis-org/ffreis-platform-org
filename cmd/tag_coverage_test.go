@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/ffreis/platform-cli/pkg/audit"
+	"github.com/FelipeFuhr/ffreis-platform-cli/pkg/audit"
 )
 
 func fullTags() map[string]string {

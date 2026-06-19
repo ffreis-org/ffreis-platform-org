@@ -3,7 +3,8 @@ module github.com/ffreis/platform-org
 go 1.25.11
 
 require (
-	github.com/FelipeFuhr/ffreis-platform-inventory v0.0.0-20260601020953-1f1529b57d83
+	github.com/FelipeFuhr/ffreis-platform-cli v0.2.0
+	github.com/FelipeFuhr/ffreis-platform-inventory v0.0.0-20260619230542-f3da82a2d389
 	github.com/aws/aws-lambda-go v1.54.0
 	github.com/aws/aws-sdk-go-v2 v1.41.7
 	github.com/aws/aws-sdk-go-v2/config v1.32.16
@@ -27,7 +28,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/servicediscovery v1.39.28
 	github.com/aws/aws-sdk-go-v2/service/sns v1.39.15
 	github.com/aws/aws-sdk-go-v2/service/sts v1.42.1
-	github.com/ffreis/platform-cli v0.0.0-20260412022253-0a429e501afe
 	github.com/mattn/go-isatty v0.0.20
 	github.com/spf13/cobra v1.10.2
 )
@@ -68,5 +68,3 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.9 // indirect
 )
-
-replace github.com/ffreis/platform-cli => github.com/FelipeFuhr/ffreis-platform-cli v0.0.0-20260412022253-0a429e501afe
