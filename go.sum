@@ -1,7 +1,7 @@
-github.com/FelipeFuhr/ffreis-platform-cli v0.0.0-20260412022253-0a429e501afe h1:Utbtzp2BOmV37yfxF1QcxUIHpw/QRTsdWjncKYwKJFs=
-github.com/FelipeFuhr/ffreis-platform-cli v0.0.0-20260412022253-0a429e501afe/go.mod h1:Ao7Rbs+xjJYhQsEq9O/l+VlHsgsW79MMPS0qhlRBv3M=
-github.com/FelipeFuhr/ffreis-platform-inventory v0.0.0-20260601020953-1f1529b57d83 h1:Wz4uDYRbWv0nThqACfVDKLcClrmqQJoyT9ewZUhq788=
-github.com/FelipeFuhr/ffreis-platform-inventory v0.0.0-20260601020953-1f1529b57d83/go.mod h1:i4ojWSiqg4u1OwN+5hGkjmzLFu/yK+5lVO7p6aPtejA=
+github.com/FelipeFuhr/ffreis-platform-cli v0.2.0 h1:QbyCCDjyLZza43CrqSbHOwUtzNoSfs6XU8LkA9q755s=
+github.com/FelipeFuhr/ffreis-platform-cli v0.2.0/go.mod h1:6Vn9R5SjOWLlVxSWaZwivUL4Ps4rCihzyeZUA9WaTYY=
+github.com/FelipeFuhr/ffreis-platform-inventory v0.0.0-20260619230542-f3da82a2d389 h1:gw806B8Krze6ZsGYplWOWZfpxfVfX209y5nm0uALGBY=
+github.com/FelipeFuhr/ffreis-platform-inventory v0.0.0-20260619230542-f3da82a2d389/go.mod h1:8gYbndPQIZdTEdPXoq0K8dBZe9S+k5DX5BuQPnpqHCs=
 github.com/aws/aws-lambda-go v1.54.0 h1:EGYpdyRGF88xszqlGcBewz811mJeRS+maNlLZXFheII=
 github.com/aws/aws-lambda-go v1.54.0/go.mod h1:dpMpZgvWx5vuQJfBt0zqBha60q7Dd7RfgJv23DymV8A=
 github.com/aws/aws-sdk-go-v2 v1.41.7 h1:DWpAJt66FmnnaRIOT/8ASTucrvuDPZASqhhLey6tLY8=
