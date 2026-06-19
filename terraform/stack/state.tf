@@ -51,3 +51,85 @@ module "tf_locks_runtime" {
     Stack   = "platform-org"
   })
 }
+
+# ---------------------------------------------------------------------------
+# Bootstrap state buckets — created by platform-bootstrap CLI and adopted
+# here for tag management. These three buckets hold Terraform state for the
+# entire platform (root=bootstrap layer, prod/dev=workload environments).
+#
+# Only tags are managed by Terraform. All other bucket configuration
+# (versioning, encryption, public-access-block) is owned by the bootstrap
+# CLI's EnsureStateBucket — ignore_changes prevents drift on those attributes.
+# ---------------------------------------------------------------------------
+
+import {
+  to = aws_s3_bucket.tf_state_root
+  id = "${var.org}-tf-state-root"
+}
+
+resource "aws_s3_bucket" "tf_state_root" {
+  bucket        = "${var.org}-tf-state-root"
+  force_destroy = false
+
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes  = [object_lock_enabled]
+  }
+
+  tags = merge(local.common_tags, {
+    Name    = "${var.org}-tf-state-root"
+    Purpose = "terraform-state"
+    Tier    = "root"
+    Layer   = "bootstrap"
+    Stack   = "bootstrap"
+  })
+}
+
+import {
+  to = aws_s3_bucket.tf_state_prod
+  id = "${var.org}-tf-state-prod"
+}
+
+resource "aws_s3_bucket" "tf_state_prod" {
+  bucket        = "${var.org}-tf-state-prod"
+  force_destroy = false
+
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes  = [object_lock_enabled]
+  }
+
+  tags = merge(local.common_tags, {
+    Name    = "${var.org}-tf-state-prod"
+    Purpose = "terraform-state"
+    Tier    = "prod"
+    Layer   = "platform-org"
+    Stack   = "platform-org"
+  })
+}
+
+import {
+  to = aws_s3_bucket.tf_state_dev
+  id = "${var.org}-tf-state-dev"
+}
+
+resource "aws_s3_bucket" "tf_state_dev" {
+  bucket        = "${var.org}-tf-state-dev"
+  force_destroy = false
+
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes  = [object_lock_enabled]
+  }
+
+  # Environment and lifecycle override: this is the dev state bucket.
+  tags = merge(local.common_tags, {
+    Name           = "${var.org}-tf-state-dev"
+    Purpose        = "terraform-state"
+    Tier           = "dev"
+    Layer          = "platform-org"
+    Stack          = "platform-org"
+    Environment    = "dev"
+    LifecycleState = "development"
+  })
+}
