@@ -15,6 +15,13 @@ LAMBDA_SRC  := ./lambda/activate
 GO          ?= $(shell command -v go 2>/dev/null || echo /usr/local/go/bin/go)
 GOFMT       ?= $(shell command -v gofmt 2>/dev/null || echo /usr/local/go/bin/gofmt)
 
+# buildguard confines heavy terraform ops (plan/apply/init/destroy) in a transient
+# systemd --user --scope cgroup so a runaway provider can't OOM-freeze the host
+# (0-swap desktop). Resolves to a command prefix when buildguard is on PATH and
+# NO_BUILDGUARD is unset; otherwise empty (the terraform call runs bare). See
+# platform/ffreis-buildguard.
+BUILDGUARD ?= $(shell command -v buildguard >/dev/null 2>&1 && [ -z "$(NO_BUILDGUARD)" ] && echo 'buildguard run --profile tf --' || true)
+
 FETCHED_FILE = $(ENVS_DIR)/$(ENV)/fetched.auto.tfvars.json
 BACKEND_LOCAL_FILE = $(STACK)/backend.local.hcl
 
@@ -79,26 +86,29 @@ fetch: _require_env
 
 ## init ENV=<env>: initialise Terraform with the env backend config
 init: _require_fetched
-	terraform -chdir=$(STACK) init \
+	# scan-fix(makefile:git-hook-isolation): unset GIT_DIR/GIT_WORK_TREE so terraform
+	# go-getter can call `git clone` without inheriting the hook's git context, which
+	# would otherwise fail module downloads with "invalid ref" during a pre-push hook.
+	$(BUILDGUARD) env -u GIT_DIR -u GIT_WORK_TREE terraform -chdir=$(STACK) init \
 		-backend-config=backend.local.hcl \
 		-backend-config=$(ENVS_REL)/$(ENV)/backend.hcl \
 		-reconfigure
 
 ## plan ENV=<env>: show execution plan
 plan: _require_fetched
-	terraform -chdir=$(STACK) plan \
+	$(BUILDGUARD) terraform -chdir=$(STACK) plan \
 		-var-file=$(ENVS_REL)/$(ENV)/terraform.tfvars \
 		-var-file=$(ENVS_REL)/$(ENV)/fetched.auto.tfvars.json
 
 ## apply ENV=<env>: apply changes
 apply: _require_fetched
-	terraform -chdir=$(STACK) apply \
+	$(BUILDGUARD) terraform -chdir=$(STACK) apply \
 		-var-file=$(ENVS_REL)/$(ENV)/terraform.tfvars \
 		-var-file=$(ENVS_REL)/$(ENV)/fetched.auto.tfvars.json
 
 ## destroy ENV=<env>: destroy all resources (requires confirmation)
 destroy: _require_fetched
-	terraform -chdir=$(STACK) destroy \
+	$(BUILDGUARD) terraform -chdir=$(STACK) destroy \
 		-var-file=$(ENVS_REL)/$(ENV)/terraform.tfvars \
 		-var-file=$(ENVS_REL)/$(ENV)/fetched.auto.tfvars.json
 
@@ -113,11 +123,14 @@ nuke: _require_fetched
 		echo "Cancelled."; \
 		exit 1; \
 	fi
-	terraform -chdir=$(STACK) init \
+	# scan-fix(makefile:git-hook-isolation): unset GIT_DIR/GIT_WORK_TREE so terraform
+	# go-getter can call `git clone` without inheriting the hook's git context, which
+	# would otherwise fail module downloads with "invalid ref" during a pre-push hook.
+	$(BUILDGUARD) env -u GIT_DIR -u GIT_WORK_TREE terraform -chdir=$(STACK) init \
 		-backend-config=backend.local.hcl \
 		-backend-config=$(ENVS_REL)/$(ENV)/backend.hcl \
 		-reconfigure
-	terraform -chdir=$(STACK) destroy \
+	$(BUILDGUARD) terraform -chdir=$(STACK) destroy \
 		-var-file=$(ENVS_REL)/$(ENV)/terraform.tfvars \
 		-var-file=$(ENVS_REL)/$(ENV)/fetched.auto.tfvars.json \
 		-auto-approve
