@@ -35,6 +35,11 @@ platform-cli's `CoreTagKeys` omits it. Inherently-untaggable ARNs (billing
   (`platform-org activate`, then ~24h warm-up).
 - **`resources` is region-scoped.** It uses the regional Resource Groups
   Tagging API, so it lists only resources in `--region`.
+- **Heavy terraform targets are buildguard-wrapped + git-hook-isolated.** `init`,
+  `plan`, `apply`, `destroy`, `nuke` run terraform through `buildguard run --profile tf`
+  (platform/ffreis-buildguard) so a runaway provider can't OOM-freeze the 0-swap desktop;
+  module-downloading inits also `env -u GIT_DIR -u GIT_WORK_TREE` so go-getter works in
+  git hooks. No-op when buildguard absent; set NO_BUILDGUARD=1 to bypass.
 
 ## Shared library dependency
 
