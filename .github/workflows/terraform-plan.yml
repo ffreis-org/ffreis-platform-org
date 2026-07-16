@@ -16,7 +16,7 @@ jobs:
       id-token: write        # Required for OIDC token exchange
       contents: read
       pull-requests: write   # Required to post plan comment
-    uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-plan.yml@105d9d036a68d89d47b6efe97d760849b99ec80b
+    uses: ffreis-org/ffreis-workflows-terraform/.github/workflows/tf-plan.yml@105d9d036a68d89d47b6efe97d760849b99ec80b
     with:
       environment: "prod"
       chdir: "terraform/stack"

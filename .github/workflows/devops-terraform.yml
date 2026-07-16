@@ -22,14 +22,14 @@ jobs:
   fmt:
     permissions:
       contents: read
-    uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-fmt.yml@105d9d036a68d89d47b6efe97d760849b99ec80b
+    uses: ffreis-org/ffreis-workflows-terraform/.github/workflows/tf-fmt.yml@105d9d036a68d89d47b6efe97d760849b99ec80b
     with:
       working-directory: "terraform"
 
   validate:
     permissions:
       contents: read
-    uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-validate.yml@105d9d036a68d89d47b6efe97d760849b99ec80b
+    uses: ffreis-org/ffreis-workflows-terraform/.github/workflows/tf-validate.yml@105d9d036a68d89d47b6efe97d760849b99ec80b
     needs: [fmt]
     with:
       chdir: "terraform/stack"
@@ -39,7 +39,7 @@ jobs:
   lint:
     permissions:
       contents: read
-    uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-lint.yml@105d9d036a68d89d47b6efe97d760849b99ec80b
+    uses: ffreis-org/ffreis-workflows-terraform/.github/workflows/tf-lint.yml@105d9d036a68d89d47b6efe97d760849b99ec80b
     needs: [fmt]
     with:
       lint-path: "terraform"
@@ -50,7 +50,7 @@ jobs:
       contents: read
       security-events: write
       actions: read
-    uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-security.yml@105d9d036a68d89d47b6efe97d760849b99ec80b
+    uses: ffreis-org/ffreis-workflows-terraform/.github/workflows/tf-security.yml@105d9d036a68d89d47b6efe97d760849b99ec80b
     needs: [fmt]
     with:
       scan-ref: "terraform"
@@ -60,7 +60,7 @@ jobs:
       contents: read
       security-events: write
       actions: read
-    uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-tfsec.yml@105d9d036a68d89d47b6efe97d760849b99ec80b
+    uses: ffreis-org/ffreis-workflows-terraform/.github/workflows/tf-tfsec.yml@105d9d036a68d89d47b6efe97d760849b99ec80b
     needs: [fmt]
     with:
       scan-path: "terraform"
@@ -72,7 +72,7 @@ jobs:
       contents: read
       security-events: write
       actions: read
-    uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-checkov.yml@105d9d036a68d89d47b6efe97d760849b99ec80b
+    uses: ffreis-org/ffreis-workflows-terraform/.github/workflows/tf-checkov.yml@105d9d036a68d89d47b6efe97d760849b99ec80b
     needs: [fmt]
     with:
       scan-directory: "terraform"
@@ -84,7 +84,7 @@ jobs:
       contents: read
       security-events: write
       actions: read
-    uses: FelipeFuhr/ffreis-workflows-terraform/.github/workflows/tf-semgrep.yml@105d9d036a68d89d47b6efe97d760849b99ec80b
+    uses: ffreis-org/ffreis-workflows-terraform/.github/workflows/tf-semgrep.yml@105d9d036a68d89d47b6efe97d760849b99ec80b
     needs: [fmt]
     with:
       working-directory: "terraform"
